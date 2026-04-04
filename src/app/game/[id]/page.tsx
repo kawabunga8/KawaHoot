@@ -28,6 +28,7 @@ export default function GameHostPage() {
   const [answerCounts, setAnswerCounts] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [loading, setLoading] = useState(false)
   const [replaying, setReplaying] = useState(false)
+  const [restarting, setRestarting] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null) // playerId being assigned
 
@@ -235,6 +236,27 @@ export default function GameHostPage() {
     setLoading(false)
   }, [id])
 
+  const randomQuestion = useCallback(async () => {
+    setLoading(true)
+    const played = game?.current_question_index ?? 0
+    const remaining = questionsRef.current
+      .map((_, i) => i)
+      .filter(i => i > played)
+    if (!remaining.length) return setLoading(false)
+    const targetIndex = remaining[Math.floor(Math.random() * remaining.length)]
+    const res = await fetch('/api/game/next-question', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, targetIndex }),
+    })
+    const data = await res.json()
+    if (data.question) {
+      setCurrentQuestion(data.question)
+      setAnswerCounts({ A: 0, B: 0, C: 0, D: 0 })
+      setGame(prev => prev ? { ...prev, status: 'question', current_question_index: targetIndex, current_question_started_at: new Date().toISOString() } : prev)
+    }
+    setLoading(false)
+  }, [id, game?.current_question_index])
+
   const replayGame = useCallback(async () => {
     setReplaying(true)
     const res = await fetch('/api/game/replay', {
@@ -256,6 +278,20 @@ export default function GameHostPage() {
       setReplaying(false)
     }
   }, [id, router])
+
+  const restartGame = useCallback(async () => {
+    setRestarting(true)
+    await fetch('/api/game/restart', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id }),
+    })
+    setGame(prev => prev ? { ...prev, status: 'waiting', current_question_index: -1, current_question_started_at: null } : prev)
+    setPlayers(prev => prev.map(p => ({ ...p, score: 0 })))
+    setCurrentQuestion(null)
+    setLeaderboard([])
+    setAnswerCounts({ A: 0, B: 0, C: 0, D: 0 })
+    setRestarting(false)
+  }, [id])
 
   const endGame = useCallback(async () => {
     setLoading(true)
@@ -548,11 +584,18 @@ export default function GameHostPage() {
             )}
             {game.status === 'answer_reveal' && (
               !isLast ? (
-                <button onClick={nextQuestion} disabled={loading}
-                  className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
-                  style={{ fontFamily: "'Fredoka One', cursive" }}>
-                  {loading ? '...' : 'Next Question →'}
-                </button>
+                <>
+                  <button onClick={nextQuestion} disabled={loading}
+                    className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {loading ? '...' : 'Next →'}
+                  </button>
+                  <button onClick={randomQuestion} disabled={loading}
+                    className="flex-1 bg-kawaCoral hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {loading ? '...' : '🎲 Random'}
+                  </button>
+                </>
               ) : (
                 <button onClick={endGame} disabled={loading}
                   className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
@@ -673,6 +716,14 @@ export default function GameHostPage() {
 
           {/* Buttons */}
           <div className="flex gap-3">
+            <button
+              onClick={restartGame}
+              disabled={restarting}
+              className="flex-1 bg-kawaGreen hover:bg-green-400 disabled:opacity-60 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+              style={{ fontFamily: "'Fredoka One', cursive" }}
+            >
+              {restarting ? 'Restarting...' : '↺ Restart'}
+            </button>
             <button
               onClick={replayGame}
               disabled={replaying}

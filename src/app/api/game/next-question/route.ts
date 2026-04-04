@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
-  const { gameId } = await req.json()
+  const { gameId, targetIndex } = await req.json()
   const supabase = createClient()
 
   const { data: game } = await supabase
@@ -13,13 +13,14 @@ export async function POST(req: NextRequest) {
 
   if (!game) return NextResponse.json({ success: false, error: 'Game not found' }, { status: 404 })
 
-  const nextIndex = game.current_question_index + 1
-
   const { data: questions } = await supabase
     .from('quiz_questions')
     .select('*')
     .eq('game_id', gameId)
     .order('order_index')
+
+  // targetIndex can be passed explicitly (e.g. random jump); otherwise increment
+  const nextIndex = targetIndex !== undefined ? targetIndex : game.current_question_index + 1
 
   const nextQuestion = questions?.[nextIndex]
   if (!nextQuestion) {

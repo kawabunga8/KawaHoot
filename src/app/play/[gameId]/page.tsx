@@ -70,6 +70,16 @@ export default function PlayPage() {
   const handleGameUpdate = useCallback(async (g: Game) => {
     setGame(g)
 
+    if (g.status === 'waiting') {
+      // Game was restarted — reset local state
+      setSelectedAnswer(null)
+      setAnswerResult(null)
+      setCurrentQuestion(null)
+      setLeaderboard([])
+      setMyRank(null)
+      setPlayer(prev => prev ? { ...prev, score: 0 } : prev)
+    }
+
     if (g.status === 'question') {
       const { data: questions } = await supabase
         .from('quiz_questions')
