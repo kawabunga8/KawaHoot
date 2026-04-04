@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, useReducer } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, Player, QuizQuestion, LeaderboardEntry } from '@/types'
@@ -27,6 +27,7 @@ export default function GameHostPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [answerCounts, setAnswerCounts] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [loading, setLoading] = useState(false)
+  const [replaying, setReplaying] = useState(false)
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
@@ -147,6 +148,17 @@ export default function GameHostPage() {
     }
     setLoading(false)
   }, [id])
+
+  const replayGame = useCallback(async () => {
+    setReplaying(true)
+    const res = await fetch('/api/game/replay', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id }),
+    })
+    const data = await res.json()
+    if (data.success) router.push(`/game/${data.gameId}`)
+    else setReplaying(false)
+  }, [id, router])
 
   const endGame = useCallback(async () => {
     setLoading(true)
@@ -332,24 +344,82 @@ export default function GameHostPage() {
 
       {/* FINISHED */}
       {game.status === 'finished' && (
-        <div className="max-w-lg mx-auto text-center">
-          <div className="text-6xl mb-4 animate-bounce-in">🏆</div>
-          <h2 className="text-white font-bold text-4xl mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>Game Over!</h2>
-          <p className="text-purple-300 mb-6">Final Leaderboard</p>
-          <div className="bg-white/10 border border-white/20 rounded-2xl p-6 space-y-3">
-            {players.slice(0, 10).map((p, i) => (
-              <div key={p.id} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-kawaYellow/20 border border-kawaYellow/40' : 'bg-white/5'}`}>
-                <span className="text-2xl w-8">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`}</span>
-                <span className="flex-1 text-white font-bold text-left">{p.nickname}</span>
-                <span className="text-kawaYellow font-bold">{p.score.toLocaleString()} pts</span>
-              </div>
-            ))}
+        <div className="max-w-lg mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8 animate-bounce-in">
+            <div className="text-7xl mb-3">🏆</div>
+            <h2 className="text-white font-bold text-5xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              Game Over!
+            </h2>
+            <p className="text-purple-300 mt-1">{game.title}</p>
           </div>
-          <a href="/host"
-            className="mt-6 inline-block bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl px-8 py-4 rounded-2xl transition-all hover:scale-105"
-            style={{ fontFamily: "'Fredoka One', cursive" }}>
-            🎮 Play Again
-          </a>
+
+          {/* Top 3 podium */}
+          {players.length >= 1 && (
+            <div className="flex items-end justify-center gap-3 mb-6">
+              {/* 2nd */}
+              {players[1] && (
+                <div className="flex-1 text-center animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                  <div className="text-3xl mb-1">🥈</div>
+                  <div className="bg-white/20 border border-white/30 rounded-t-2xl px-2 py-3" style={{ height: 100 }}>
+                    <p className="text-white font-bold text-sm truncate">{players[1].nickname}</p>
+                    <p className="text-kawaYellow font-bold text-lg">{players[1].score.toLocaleString()}</p>
+                    <p className="text-white/40 text-xs">pts</p>
+                  </div>
+                </div>
+              )}
+              {/* 1st */}
+              <div className="flex-1 text-center animate-slide-up">
+                <div className="text-4xl mb-1">🥇</div>
+                <div className="bg-kawaYellow/30 border-2 border-kawaYellow rounded-t-2xl px-2 py-3" style={{ height: 130 }}>
+                  <p className="text-white font-bold text-sm truncate">{players[0].nickname}</p>
+                  <p className="text-kawaYellow font-bold text-xl">{players[0].score.toLocaleString()}</p>
+                  <p className="text-white/40 text-xs">pts</p>
+                </div>
+              </div>
+              {/* 3rd */}
+              {players[2] && (
+                <div className="flex-1 text-center animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                  <div className="text-3xl mb-1">🥉</div>
+                  <div className="bg-white/10 border border-white/20 rounded-t-2xl px-2 py-3" style={{ height: 80 }}>
+                    <p className="text-white font-bold text-sm truncate">{players[2].nickname}</p>
+                    <p className="text-kawaYellow font-bold text-base">{players[2].score.toLocaleString()}</p>
+                    <p className="text-white/40 text-xs">pts</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Full scoreboard */}
+          {players.length > 3 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-6 space-y-2">
+              {players.slice(3, 10).map((p, i) => (
+                <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
+                  <span className="text-white/50 font-bold w-6 text-center text-sm">{i + 4}</span>
+                  <span className="flex-1 text-white font-semibold">{p.nickname}</span>
+                  <span className="text-kawaYellow font-bold">{p.score.toLocaleString()} pts</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={replayGame}
+              disabled={replaying}
+              className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-60 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+              style={{ fontFamily: "'Fredoka One', cursive" }}
+            >
+              {replaying ? 'Starting...' : '🔁 Play Again'}
+            </button>
+            <a href="/host"
+              className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 text-center"
+              style={{ fontFamily: "'Fredoka One', cursive" }}>
+              🎮 New Game
+            </a>
+          </div>
         </div>
       )}
     </div>

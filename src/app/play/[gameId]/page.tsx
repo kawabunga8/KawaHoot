@@ -370,25 +370,57 @@ export default function PlayPage() {
 
   // FINISHED
   if (game.status === 'finished') {
+    const podiumEmoji = myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '🎉'
     return (
-      <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 text-center">
-        <div className="text-6xl mb-4 animate-bounce-in">🏆</div>
-        <h1 className="text-white font-bold text-4xl mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>
-          Game Over!
-        </h1>
-        <p className="text-purple-300 mb-6">Thanks for playing, {player.nickname}!</p>
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 mb-6 w-full max-w-sm">
-          <p className="text-white/50 text-sm mb-1">Your Final Score</p>
-          <p className="text-kawaYellow font-bold text-5xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
-            {player.score.toLocaleString()}
-          </p>
-          {myRank && <p className="text-white/60 mt-1">Rank #{myRank}</p>}
+      <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 py-8 text-center">
+        <div className="w-full max-w-sm space-y-5">
+          {/* Trophy + result */}
+          <div className="animate-bounce-in">
+            <div className="text-7xl mb-3">{podiumEmoji}</div>
+            <h1 className="text-white font-bold text-4xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              Game Over!
+            </h1>
+            <p className="text-purple-300 mt-1">Well played, {player.nickname}!</p>
+          </div>
+
+          {/* Score card */}
+          <div className={`rounded-2xl p-5 border ${myRank === 1 ? 'bg-kawaYellow/20 border-kawaYellow/60' : 'bg-white/10 border-white/20'}`}>
+            <p className="text-white/60 text-sm mb-1">Final Score</p>
+            <p className="text-kawaYellow font-bold text-6xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {player.score.toLocaleString()}
+            </p>
+            {myRank && (
+              <p className="text-white/70 font-semibold mt-1">
+                {myRank === 1 ? '🏆 Champion!' : myRank === 2 ? 'Runner Up' : myRank === 3 ? 'Third Place' : `Rank #${myRank}`}
+              </p>
+            )}
+          </div>
+
+          {/* Leaderboard */}
+          {leaderboard.length > 0 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+              <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Final Leaderboard</h3>
+              <div className="space-y-2">
+                {leaderboard.slice(0, 5).map((p, i) => (
+                  <div key={p.id}
+                    className={`flex items-center gap-2 p-2 rounded-xl ${p.id === playerId ? 'bg-kawaPurple/30 border border-kawaPurple' : ''}`}>
+                    <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i]}</span>
+                    <span className={`flex-1 text-left text-sm font-semibold ${p.id === playerId ? 'text-kawaYellow' : 'text-white'}`}>
+                      {p.nickname}
+                    </span>
+                    <span className="text-white/70 text-sm font-bold">{p.score.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <a href="/"
+            className="block w-full bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+            style={{ fontFamily: "'Fredoka One', cursive" }}>
+            Play Again →
+          </a>
         </div>
-        <a href="/"
-          className="bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl px-8 py-4 rounded-2xl transition-all hover:scale-105"
-          style={{ fontFamily: "'Fredoka One', cursive" }}>
-          Play Again →
-        </a>
       </div>
     )
   }
