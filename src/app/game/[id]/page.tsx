@@ -66,21 +66,8 @@ export default function GameHostPage() {
     return () => { clearInterval(poll); supabase.removeChannel(sub) }
   }, [id, supabase])
 
-  // Game state: poll every 2s + realtime (client-side filtered)
-  useEffect(() => {
-    function refetch() {
-      supabase.from('games').select('*').eq('id', id).single()
-        .then(({ data }) => { if (data) setGame(data) })
-    }
-    const poll = setInterval(refetch, 2000)
-    const sub = supabase.channel(`host-game-${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, ({ new: updated }) => {
-        const g = updated as Game
-        if (g.id === id) setGame(g)
-      })
-      .subscribe()
-    return () => { clearInterval(poll); supabase.removeChannel(sub) }
-  }, [id, supabase])
+  // Host drives all game state changes via button clicks — no polling needed here.
+  // Polling game state would race against optimistic updates and revert them.
 
   // Answer counts: poll + realtime
   useEffect(() => {
@@ -122,9 +109,12 @@ export default function GameHostPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
-    // Optimistic: update question immediately from local data
     const q = questionsRef.current[0]
-    if (q) setCurrentQuestion(q)
+    if (q) {
+      setCurrentQuestion(q)
+      setAnswerCounts({ A: 0, B: 0, C: 0, D: 0 })
+      setGame(prev => prev ? { ...prev, status: 'question', current_question_index: 0, current_question_started_at: new Date().toISOString() } : prev)
+    }
     setLoading(false)
   }, [id])
 
