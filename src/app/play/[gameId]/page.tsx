@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Game, QuizQuestion, Player } from '@/types'
+import type { Game, QuizQuestion, Player, Team } from '@/types'
 
 const ANSWER_CONFIG = {
   A: { bg: 'bg-kawared hover:bg-red-500', shape: '▲' },
@@ -31,6 +31,8 @@ export default function PlayPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [leaderboard, setLeaderboard] = useState<Player[]>([])
   const [myRank, setMyRank] = useState<number | null>(null)
+  const [followingReplay, setFollowingReplay] = useState(false)
+  const [myTeam, setMyTeam] = useState<Team | null>(null)
 
   // Keep current game/question in refs so async callbacks always see the latest value
   const gameRef = useRef<Game | null>(null)
@@ -38,11 +40,30 @@ export default function PlayPage() {
   const currentQuestionRef = useRef<QuizQuestion | null>(null)
   currentQuestionRef.current = currentQuestion
 
-  // Load player once
+  // Load player + team once; re-check team whenever player's team_id might change
   useEffect(() => {
     if (!playerId) { router.push('/'); return }
     supabase.from('players').select('*').eq('id', playerId).single()
-      .then(({ data }) => { if (data) setPlayer(data) })
+      .then(async ({ data }) => {
+        if (!data) return
+        setPlayer(data)
+        if (data.team_id) {
+          const { data: teamData } = await supabase.from('teams').select('*').eq('id', data.team_id).single()
+          if (teamData) setMyTeam(teamData)
+        }
+      })
+    // Poll for team assignment (host may assign after player joins)
+    const poll = setInterval(async () => {
+      const { data } = await supabase.from('players').select('team_id').eq('id', playerId).single()
+      if (!data) return
+      if (data.team_id) {
+        const { data: teamData } = await supabase.from('teams').select('*').eq('id', data.team_id).single()
+        setMyTeam(teamData ?? null)
+      } else {
+        setMyTeam(null)
+      }
+    }, 3000)
+    return () => clearInterval(poll)
   }, [playerId, router, supabase])
 
   // Handle a game state update
@@ -134,6 +155,26 @@ export default function PlayPage() {
     }
   }, [gameId, router, supabase, handleGameUpdate])
 
+  // Poll for replay: when teacher hits Play Again, next_game_id gets set on this game.
+  // Find the player's new ID in the new game and redirect them automatically.
+  useEffect(() => {
+    if (game?.status !== 'finished' || !playerId) return
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from('games').select('next_game_id').eq('id', gameId).single()
+      if (!data?.next_game_id) return
+      // Find this player in the new game by matching nickname
+      const { data: playerData } = await supabase
+        .from('players').select('id').eq('game_id', data.next_game_id).eq('nickname', player?.nickname || '').single()
+      if (playerData) {
+        clearInterval(poll)
+        setFollowingReplay(true)
+        router.push(`/play/${data.next_game_id}?playerId=${playerData.id}`)
+      }
+    }, 2000)
+    return () => clearInterval(poll)
+  }, [game?.status, gameId, playerId, player?.nickname, supabase, router])
+
   // Countdown timer
   useEffect(() => {
     if (!game || game.status !== 'question' || !currentQuestion || !game.current_question_started_at) return
@@ -191,6 +232,11 @@ export default function PlayPage() {
             <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
               {player.nickname}
             </p>
+            {myTeam && (
+              <p className="text-white/70 font-semibold mt-2 text-sm">
+                👥 {myTeam.name}
+              </p>
+            )}
           </div>
           <div className="mt-8 flex justify-center gap-1">
             {[0, 1, 2].map(i => (
@@ -216,7 +262,10 @@ export default function PlayPage() {
         </div>
         <div className="flex-1 flex flex-col p-4">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-white/50 text-sm font-semibold">{player.nickname}</span>
+            <div>
+              <span className="text-white/50 text-sm font-semibold">{player.nickname}</span>
+              {myTeam && <p className="text-white/40 text-xs">👥 {myTeam.name}</p>}
+            </div>
             <span className={`font-bold text-2xl ${timeLeft <= 5 ? 'text-kawared animate-pulse' : 'text-kawaYellow'}`}
               style={{ fontFamily: "'Fredoka One', cursive" }}>
               {timeLeft}s
@@ -237,9 +286,9 @@ export default function PlayPage() {
                 const cfg = ANSWER_CONFIG[opt]
                 return (
                   <button key={opt} onClick={() => submitAnswer(opt)}
-                    className={`${cfg.bg} text-white font-bold rounded-2xl flex flex-col items-center justify-center gap-2 p-4 min-h-[120px] transition-all hover:scale-105 active:scale-95 shadow-lg`}>
-                    <span className="text-3xl">{cfg.shape}</span>
-                    <span className="text-sm text-center leading-tight">
+                    className={`${cfg.bg} text-white font-bold rounded-2xl flex flex-col items-center justify-center gap-3 p-5 min-h-[140px] transition-all hover:scale-105 active:scale-95 shadow-lg`}>
+                    <span className="text-4xl">{cfg.shape}</span>
+                    <span className="text-xl text-center leading-tight font-bold">
                       {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
                     </span>
                   </button>
@@ -370,6 +419,17 @@ export default function PlayPage() {
 
   // FINISHED
   if (game.status === 'finished') {
+    if (followingReplay) {
+      return (
+        <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center text-center px-4">
+          <div className="text-6xl mb-4 animate-bounce">🚀</div>
+          <p className="text-white font-bold text-2xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+            New game starting!
+          </p>
+          <p className="text-purple-300 mt-2">Joining you in automatically...</p>
+        </div>
+      )
+    }
     const podiumEmoji = myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '🎉'
     return (
       <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 py-8 text-center">
@@ -415,10 +475,14 @@ export default function PlayPage() {
             </div>
           )}
 
+          <p className="text-white/30 text-xs animate-pulse">
+            🔁 If the teacher replays, you&apos;ll be moved automatically
+          </p>
+
           <a href="/"
             className="block w-full bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
             style={{ fontFamily: "'Fredoka One', cursive" }}>
-            Play Again →
+            Leave Game →
           </a>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Game, Player, QuizQuestion, LeaderboardEntry } from '@/types'
+import type { Game, Player, QuizQuestion, LeaderboardEntry, Team } from '@/types'
 
 const ANSWER_COLORS = {
   A: { bg: 'bg-kawared', text: 'text-white', shape: '▲' },
@@ -28,6 +28,8 @@ export default function GameHostPage() {
   const [answerCounts, setAnswerCounts] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [loading, setLoading] = useState(false)
   const [replaying, setReplaying] = useState(false)
+  const [teams, setTeams] = useState<Team[]>([])
+  const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null) // playerId being assigned
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
@@ -46,6 +48,16 @@ export default function GameHostPage() {
       if (gameData.current_question_index >= 0 && qData) {
         setCurrentQuestion(qData[gameData.current_question_index] || null)
       }
+
+      // Save to local game library
+      try {
+        const saved = JSON.parse(localStorage.getItem('kawahoot_games') || '[]')
+        const exists = saved.some((g: { id: string }) => g.id === id)
+        if (!exists) {
+          saved.unshift({ id, title: gameData.title, pin: gameData.pin, createdAt: gameData.created_at })
+          localStorage.setItem('kawahoot_games', JSON.stringify(saved.slice(0, 20)))
+        }
+      } catch {}
     }
     load()
   }, [id, router, supabase])
@@ -65,6 +77,22 @@ export default function GameHostPage() {
       })
       .subscribe()
     return () => { clearInterval(poll); supabase.removeChannel(sub) }
+  }, [id, supabase])
+
+  // Teams: fetch + realtime
+  useEffect(() => {
+    function refetch() {
+      supabase.from('teams').select('*').eq('game_id', id).order('created_at')
+        .then(({ data }) => setTeams(data || []))
+    }
+    refetch()
+    const sub = supabase.channel(`host-teams-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, (payload) => {
+        const row = (payload.new || payload.old) as { game_id?: string } | null
+        if (row?.game_id === id) refetch()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(sub) }
   }, [id, supabase])
 
   // Host drives all game state changes via button clicks — no polling needed here.
@@ -103,6 +131,64 @@ export default function GameHostPage() {
     }, 200)
     return () => clearInterval(tick)
   }, [game?.status, game?.current_question_started_at, currentQuestion]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const TEAM_PRESETS = [
+    { name: 'Red Team', color: 'kawared' },
+    { name: 'Blue Team', color: 'kawaBlue' },
+    { name: 'Yellow Team', color: 'kawaYellow' },
+    { name: 'Green Team', color: 'kawaGreen' },
+    { name: 'Purple Team', color: 'kawaPurple' },
+    { name: 'Orange Team', color: 'kawaCoral' },
+  ]
+
+  const TEAM_COLORS: Record<string, string> = {
+    kawared: 'bg-kawared',
+    kawaBlue: 'bg-kawaBlue',
+    kawaYellow: 'bg-kawaYellow',
+    kawaGreen: 'bg-kawaGreen',
+    kawaPurple: 'bg-kawaPurple',
+    kawaCoral: 'bg-kawaCoral',
+  }
+
+  const setMode = useCallback(async (mode: 'individual' | 'teams') => {
+    setGame(prev => prev ? { ...prev, mode } : prev)
+    await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'set_mode', mode }),
+    })
+    if (mode === 'individual') {
+      setPlayers(prev => prev.map(p => ({ ...p, team_id: null })))
+    }
+  }, [id])
+
+  const addTeam = useCallback(async () => {
+    const used = teams.map(t => t.name)
+    const preset = TEAM_PRESETS.find(p => !used.includes(p.name)) || { name: `Team ${teams.length + 1}`, color: 'kawaPurple' }
+    const res = await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'create', name: preset.name, color: preset.color }),
+    })
+    const data = await res.json()
+    if (data.success) setTeams(prev => [...prev, data.team])
+  }, [id, teams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deleteTeam = useCallback(async (teamId: string) => {
+    setTeams(prev => prev.filter(t => t.id !== teamId))
+    setPlayers(prev => prev.map(p => p.team_id === teamId ? { ...p, team_id: null } : p))
+    await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'delete', teamId }),
+    })
+  }, [id])
+
+  const assignPlayer = useCallback(async (playerId: string, teamId: string | null) => {
+    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, team_id: teamId } : p))
+    setAssigningPlayer(null)
+    await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'assign', playerId, teamId }),
+    })
+  }, [id])
 
   const startGame = useCallback(async () => {
     setLoading(true)
@@ -156,8 +242,19 @@ export default function GameHostPage() {
       body: JSON.stringify({ gameId: id }),
     })
     const data = await res.json()
-    if (data.success) router.push(`/game/${data.gameId}`)
-    else setReplaying(false)
+    if (data.success) {
+      // Persist new game to saved library
+      try {
+        const saved = JSON.parse(localStorage.getItem('kawahoot_games') || '[]')
+        const updated = saved.map((g: { id: string }) =>
+          g.id === id ? { ...g, nextGameId: data.gameId } : g
+        )
+        localStorage.setItem('kawahoot_games', JSON.stringify(updated))
+      } catch {}
+      router.push(`/game/${data.gameId}`)
+    } else {
+      setReplaying(false)
+    }
   }, [id, router])
 
   const endGame = useCallback(async () => {
@@ -183,37 +280,57 @@ export default function GameHostPage() {
 
   return (
     <div className="min-h-screen bg-kawaDark p-4 md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-white font-bold text-xl md:text-2xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
-            {game.title}
-          </h1>
+      {/* Header — compact during question phase to make room for the question banner */}
+      {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion ? (
+        <div className="flex items-center gap-4 mb-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3" />
+          <img src="/rcs-logo.png" alt="RCS" className="h-16 flex-shrink-0" />
+          <div className="flex-1 bg-white rounded-2xl shadow-2xl border-4 border-kawaYellow px-6 py-4 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-white to-yellow-50 pointer-events-none" />
+            <div className="relative z-10">
+              <p className="text-kawaDark/50 text-xs font-bold uppercase tracking-widest mb-1">
+                Q{game.current_question_index + 1} / {questions.length}
+              </p>
+              <p className="text-kawaDark font-bold text-2xl md:text-3xl lg:text-4xl leading-tight" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {currentQuestion.question_text}
+              </p>
+            </div>
+          </div>
+          <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-4 py-2 flex-shrink-0">
+            <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">PIN</p>
+            <p className="text-kawaYellow font-bold text-2xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {game.pin}
+            </p>
+          </div>
         </div>
-        <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
-          <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>
-          <p className="text-kawaYellow font-bold text-3xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
-            {game.pin}
-          </p>
+      ) : (
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-white font-bold text-xl md:text-2xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {game.title}
+            </h1>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3" />
+          </div>
+          <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
+            <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>
+            <p className="text-kawaYellow font-bold text-3xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {game.pin}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* WAITING LOBBY */}
       {game.status === 'waiting' && (
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-3xl p-8 mb-6">
-            <p className="text-white/60 mb-2">Students join at</p>
-            <p className="text-kawaYellow font-bold text-lg">kawahoot.vercel.app</p>
-            <div className="my-6 flex justify-center">
+        <div className="max-w-2xl mx-auto">
+          {/* PIN display */}
+          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-3xl p-6 mb-5 text-center">
+            <p className="text-white/60 mb-2 text-sm">Students join at <span className="text-kawaYellow font-bold">kawahoot.vercel.app</span></p>
+            <div className="my-4 flex justify-center">
               <div className="bg-kawaDark border-4 border-kawaYellow rounded-2xl px-8 py-4 relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-kawaYellow text-kawaDark text-xs font-bold px-3 py-1 rounded-full">
-                  GAME PIN
-                </div>
-                <p className="text-white font-bold text-6xl tracking-[0.2em]" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                  {game.pin}
-                </p>
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-kawaYellow text-kawaDark text-xs font-bold px-3 py-1 rounded-full">GAME PIN</div>
+                <p className="text-white font-bold text-6xl tracking-[0.2em]" style={{ fontFamily: "'Fredoka One', cursive" }}>{game.pin}</p>
               </div>
             </div>
             <div className="flex items-center justify-center gap-3">
@@ -222,8 +339,30 @@ export default function GameHostPage() {
             </div>
           </div>
 
-          {players.length > 0 && (
-            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-6">
+          {/* Mode toggle */}
+          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
+            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3 text-center">Game Mode</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMode('individual')}
+                className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${game.mode === 'individual' ? 'bg-kawaPurple text-white scale-105' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                👤 Individual
+              </button>
+              <button
+                onClick={() => setMode('teams')}
+                className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${game.mode === 'teams' ? 'bg-kawaCoral text-white scale-105' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                👥 Teams
+              </button>
+            </div>
+          </div>
+
+          {/* Individual mode: player chips */}
+          {game.mode === 'individual' && players.length > 0 && (
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
               <div className="flex flex-wrap gap-2 justify-center">
                 {players.map(p => (
                   <span key={p.id} className="bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold px-3 py-1.5 rounded-full animate-bounce-in">
@@ -231,6 +370,86 @@ export default function GameHostPage() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Teams mode: team builder */}
+          {game.mode === 'teams' && (
+            <div className="space-y-4 mb-5">
+              {/* Unassigned players */}
+              <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+                <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3">
+                  Players ({players.filter(p => !p.team_id).length} unassigned)
+                </p>
+                <div className="flex flex-wrap gap-2 min-h-[36px]">
+                  {players.filter(p => !p.team_id).map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)}
+                      className={`text-white text-sm font-bold px-3 py-1.5 rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white' : 'bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple/60'}`}
+                    >
+                      {p.nickname}
+                    </button>
+                  ))}
+                  {players.filter(p => !p.team_id).length === 0 && (
+                    <p className="text-white/30 text-sm italic">All players assigned</p>
+                  )}
+                </div>
+                {assigningPlayer && (
+                  <p className="text-kawaYellow text-xs mt-2 animate-pulse">
+                    ↓ Click a team to assign <strong>{players.find(p => p.id === assigningPlayer)?.nickname}</strong>
+                  </p>
+                )}
+              </div>
+
+              {/* Teams */}
+              {teams.map(team => {
+                const teamPlayers = players.filter(p => p.team_id === team.id)
+                const colorClass = TEAM_COLORS[team.color] || 'bg-kawaPurple'
+                return (
+                  <div
+                    key={team.id}
+                    onClick={() => assigningPlayer && assignPlayer(assigningPlayer, team.id)}
+                    className={`border-2 rounded-2xl p-4 transition-all ${assigningPlayer ? 'border-kawaYellow cursor-pointer hover:scale-[1.02] hover:bg-white/10' : 'border-white/20'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full ${colorClass}`} />
+                        <p className="text-white font-bold">{team.name}</p>
+                        <span className="text-white/40 text-sm">({teamPlayers.length})</span>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteTeam(team.id) }}
+                        className="text-white/30 hover:text-kawared text-lg transition-colors"
+                      >×</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 min-h-[28px]">
+                      {teamPlayers.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={(e) => { e.stopPropagation(); assignPlayer(p.id, null) }}
+                          className={`${colorClass} text-white text-xs font-bold px-2.5 py-1 rounded-full hover:opacity-70 transition-opacity`}
+                          title="Click to unassign"
+                        >
+                          {p.nickname} ×
+                        </button>
+                      ))}
+                      {teamPlayers.length === 0 && (
+                        <p className="text-white/20 text-xs italic">No players yet</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {teams.length < 6 && (
+                <button
+                  onClick={addTeam}
+                  className="w-full border-2 border-dashed border-white/20 rounded-2xl py-3 text-white/50 hover:text-white hover:border-white/40 transition-all font-bold"
+                >
+                  + Add Team
+                </button>
+              )}
             </div>
           )}
 
@@ -245,13 +464,21 @@ export default function GameHostPage() {
       {/* QUESTION PHASE */}
       {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-4 text-sm text-white/50">
-            <span>Question {game.current_question_index + 1} / {questions.length}</span>
-            <span>{players.length} players</span>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6 mb-4 text-center">
-            <p className="text-white font-bold text-2xl md:text-3xl">{currentQuestion.question_text}</p>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-white/50 text-sm">{players.length} players</span>
+            <div className="flex items-center gap-3">
+              <span className="text-white/60 text-sm">{totalAnswers} / {players.length} answered</span>
+              {game.status === 'question' && players.length - totalAnswers > 0 && (
+                <span className="bg-kawared/20 border border-kawared/50 text-kawared font-bold text-sm px-3 py-1 rounded-full animate-pulse">
+                  {players.length - totalAnswers} left
+                </span>
+              )}
+              {game.status === 'question' && players.length > 0 && players.length - totalAnswers === 0 && (
+                <span className="bg-kawaGreen/20 border border-kawaGreen/50 text-kawaGreen font-bold text-sm px-3 py-1 rounded-full">
+                  All answered ✓
+                </span>
+              )}
+            </div>
           </div>
 
           {game.status === 'question' && (
@@ -294,10 +521,6 @@ export default function GameHostPage() {
                 </div>
               )
             })}
-          </div>
-
-          <div className="text-center text-white/50 text-sm mb-4">
-            {totalAnswers} / {players.length} answered
           </div>
 
           {game.status === 'answer_reveal' && leaderboard.length > 0 && (
@@ -343,7 +566,15 @@ export default function GameHostPage() {
       )}
 
       {/* FINISHED */}
-      {game.status === 'finished' && (
+      {game.status === 'finished' && (() => {
+        // Compute team scores
+        const teamScores = teams.map(team => ({
+          team,
+          score: players.filter(p => p.team_id === team.id).reduce((sum, p) => sum + p.score, 0),
+          members: players.filter(p => p.team_id === team.id),
+        })).sort((a, b) => b.score - a.score)
+
+        return (
         <div className="max-w-lg mx-auto">
           {/* Header */}
           <div className="text-center mb-8 animate-bounce-in">
@@ -354,7 +585,43 @@ export default function GameHostPage() {
             <p className="text-purple-300 mt-1">{game.title}</p>
           </div>
 
-          {/* Top 3 podium */}
+          {/* Winning team banner (teams mode only) */}
+          {game.mode === 'teams' && teamScores.length > 0 && (
+            <div className={`${TEAM_COLORS[teamScores[0].team.color] || 'bg-kawaPurple'} rounded-3xl p-6 mb-6 text-center shadow-xl animate-bounce-in`}>
+              <p className="text-white/80 text-sm font-bold uppercase tracking-widest mb-1">Winning Team</p>
+              <p className="text-white font-bold text-4xl mb-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                🏆 {teamScores[0].team.name}
+              </p>
+              <p className="text-white/80 font-bold text-2xl">{teamScores[0].score.toLocaleString()} pts</p>
+              <div className="flex flex-wrap gap-2 justify-center mt-3">
+                {teamScores[0].members.map(p => (
+                  <span key={p.id} className="bg-white/20 text-white text-sm font-bold px-3 py-1 rounded-full">{p.nickname}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All teams scoreboard (teams mode) */}
+          {game.mode === 'teams' && teamScores.length > 1 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-6">
+              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Team Scores</h3>
+              <div className="space-y-2">
+                {teamScores.map((ts, i) => (
+                  <div key={ts.team.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
+                    <span className="text-xl">{['🥇','🥈','🥉','4','5','6'][i]}</span>
+                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${TEAM_COLORS[ts.team.color] || 'bg-kawaPurple'}`} />
+                    <span className="flex-1 text-white font-semibold">{ts.team.name}</span>
+                    <span className="text-kawaYellow font-bold">{ts.score.toLocaleString()} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top 3 podium — individual scores */}
+          {game.mode === 'teams' && players.length > 0 && (
+            <p className="text-white/60 text-xs font-bold uppercase tracking-widest text-center mb-3">Top Individuals</p>
+          )}
           {players.length >= 1 && (
             <div className="flex items-end justify-center gap-3 mb-6">
               {/* 2nd */}
@@ -421,7 +688,8 @@ export default function GameHostPage() {
             </a>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

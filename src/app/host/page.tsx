@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
 import type { CSVRow } from '@/types'
+
+type SavedGame = { id: string; title: string; pin: string; createdAt: string }
 
 const SAMPLE_CSV = `question,option_a,option_b,option_c,option_d,correct_answer,time_limit
 What is 2 + 2?,3,4,5,6,B,20
@@ -19,6 +21,34 @@ export default function HostPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [parseError, setParseError] = useState('')
+  const [savedGames, setSavedGames] = useState<SavedGame[]>([])
+  const [replayingId, setReplayingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('kawahoot_games')
+    if (stored) {
+      try { setSavedGames(JSON.parse(stored)) } catch {}
+    }
+  }, [])
+
+  async function handleReplay(gameId: string) {
+    setReplayingId(gameId)
+    const res = await fetch('/api/game/replay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId }),
+    })
+    const data = await res.json()
+    setReplayingId(null)
+    if (!data.success) { alert(data.error || 'Failed to replay game'); return }
+    // Update saved games with new entry
+    const updated: SavedGame[] = JSON.parse(localStorage.getItem('kawahoot_games') || '[]')
+    const orig = updated.find(g => g.id === gameId)
+    const newEntry: SavedGame = { id: data.gameId, title: orig?.title || 'Game', pin: data.pin, createdAt: new Date().toISOString() }
+    const next = [newEntry, ...updated].slice(0, 20)
+    localStorage.setItem('kawahoot_games', JSON.stringify(next))
+    router.push(`/game/${data.gameId}`)
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -215,6 +245,35 @@ export default function HostPage() {
             {loading ? 'Creating Game...' : '🎮 Create Game & Get PIN'}
           </button>
         </form>
+        {/* Saved Games */}
+        {savedGames.length > 0 && (
+          <div className="mt-10">
+            <h2
+              className="text-2xl text-white font-bold mb-4"
+              style={{ fontFamily: "'Fredoka One', cursive" }}
+            >
+              My Saved Games
+            </h2>
+            <div className="space-y-3">
+              {savedGames.map(g => (
+                <div key={g.id} className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-white font-bold text-lg">{g.title}</p>
+                    <p className="text-white/50 text-sm">PIN: {g.pin} · {new Date(g.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <button
+                    onClick={() => handleReplay(g.id)}
+                    disabled={replayingId === g.id}
+                    className="bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold px-5 py-2 rounded-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}
+                  >
+                    {replayingId === g.id ? 'Loading...' : '🔁 Replay'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

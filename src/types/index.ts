@@ -17,8 +17,18 @@ export type Game = {
   host_id: string
   title: string
   status: 'waiting' | 'question' | 'answer_reveal' | 'leaderboard' | 'finished'
+  mode: 'individual' | 'teams'
   current_question_index: number
   current_question_started_at: string | null
+  next_game_id: string | null
+  created_at: string
+}
+
+export type Team = {
+  id: string
+  game_id: string
+  name: string
+  color: string
   created_at: string
 }
 
@@ -27,6 +37,7 @@ export type Player = {
   game_id: string
   nickname: string
   score: number
+  team_id: string | null
   joined_at: string
 }
 
