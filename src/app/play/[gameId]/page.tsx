@@ -32,9 +32,11 @@ export default function PlayPage() {
   const [leaderboard, setLeaderboard] = useState<Player[]>([])
   const [myRank, setMyRank] = useState<number | null>(null)
 
-  // Keep current game in a ref so async callbacks always see the latest value
+  // Keep current game/question in refs so async callbacks always see the latest value
   const gameRef = useRef<Game | null>(null)
   gameRef.current = game
+  const currentQuestionRef = useRef<QuizQuestion | null>(null)
+  currentQuestionRef.current = currentQuestion
 
   // Load player once
   useEffect(() => {
@@ -62,11 +64,28 @@ export default function PlayPage() {
     }
 
     if (g.status === 'answer_reveal') {
+      // Fetch leaderboard
       const { data: players } = await supabase
         .from('players').select('*').eq('game_id', gameId).order('score', { ascending: false })
       setLeaderboard(players || [])
       const rank = (players || []).findIndex(p => p.id === playerId) + 1
       setMyRank(rank > 0 ? rank : null)
+
+      // Now reveal this player's answer result and update their score
+      if (playerId && currentQuestionRef.current) {
+        const { data: answer } = await supabase
+          .from('answers')
+          .select('is_correct, points_earned')
+          .eq('player_id', playerId)
+          .eq('question_id', currentQuestionRef.current.id)
+          .single()
+        if (answer) {
+          setAnswerResult({ correct: answer.is_correct, points: answer.points_earned })
+          // Update displayed score from the authoritative DB value
+          const me = (players || []).find(p => p.id === playerId)
+          if (me) setPlayer(prev => prev ? { ...prev, score: me.score } : prev)
+        }
+      }
     }
   }, [gameId, playerId, supabase])
 
@@ -127,7 +146,8 @@ export default function PlayPage() {
     if (selectedAnswer || !currentQuestion || !playerId || !g?.current_question_started_at) return
     setSelectedAnswer(answer)
     const responseTime = Date.now() - new Date(g.current_question_started_at).getTime()
-    const res = await fetch('/api/game/answer', {
+    // Fire and forget — result is revealed only when teacher presses Reveal Answer
+    fetch('/api/game/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -137,9 +157,6 @@ export default function PlayPage() {
         responseTimeMs: responseTime,
       }),
     })
-    const data = await res.json()
-    setAnswerResult({ correct: data.isCorrect, points: data.pointsEarned })
-    setPlayer(prev => prev ? { ...prev, score: prev.score + (data.pointsEarned || 0) } : prev)
   }, [selectedAnswer, currentQuestion, playerId, gameId])
 
   if (!game || !player) {
@@ -223,26 +240,11 @@ export default function PlayPage() {
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center">
-              {answerResult ? (
-                <div className="animate-bounce-in">
-                  <div className="text-7xl mb-4">{answerResult.correct ? '✅' : '❌'}</div>
-                  <p className="text-white font-bold text-3xl mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                    {answerResult.correct ? 'Correct!' : 'Oops!'}
-                  </p>
-                  {answerResult.correct && (
-                    <p className="text-kawaYellow font-bold text-2xl">+{answerResult.points} pts</p>
-                  )}
-                  <p className="text-white/50 mt-4">Waiting for reveal...</p>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <div className="text-5xl mb-4 animate-bounce">⏳</div>
-                  <p className="text-white font-bold text-xl">
-                    Locked in: <span className="text-kawaYellow">{selectedAnswer}</span>
-                  </p>
-                  <p className="text-white/50 mt-2">Waiting for results...</p>
-                </div>
-              )}
+              <div className="text-5xl mb-4 animate-bounce">⏳</div>
+              <p className="text-white font-bold text-xl">
+                Answer locked in!
+              </p>
+              <p className="text-white/50 mt-2">Waiting for the teacher to reveal...</p>
             </div>
           )}
         </div>
