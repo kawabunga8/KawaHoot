@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import MusicPlayer from '@/components/MusicPlayer'
 
 export const metadata: Metadata = {
   title: 'Kawahoot — Live Classroom Quiz Game',
@@ -15,6 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased min-h-screen bg-kawaDark">
         {children}
+        <MusicPlayer />
       </body>
     </html>
   )
