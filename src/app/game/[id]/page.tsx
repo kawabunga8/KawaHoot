@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, Player, QuizQuestion, LeaderboardEntry } from '@/types'
@@ -15,7 +15,9 @@ const ANSWER_COLORS = {
 export default function GameHostPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const supabase = createClient()
+
+  // Stable client — never recreated across renders
+  const supabase = useMemo(() => createClient(), [])
 
   const [game, setGame] = useState<Game | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
@@ -26,21 +28,18 @@ export default function GameHostPage() {
   const [answerCounts, setAnswerCounts] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [loading, setLoading] = useState(false)
 
+  const questionsRef = useRef<QuizQuestion[]>([])
+  questionsRef.current = questions
+
+  // Initial load
   useEffect(() => {
     async function load() {
-      const { data: gameData } = await supabase
-        .from('games')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const { data: gameData } = await supabase.from('games').select('*').eq('id', id).single()
       if (!gameData) { router.push('/host'); return }
       setGame(gameData)
 
       const { data: qData } = await supabase
-        .from('quiz_questions')
-        .select('*')
-        .eq('game_id', id)
-        .order('order_index')
+        .from('quiz_questions').select('*').eq('game_id', id).order('order_index')
       setQuestions(qData || [])
 
       if (gameData.current_question_index >= 0 && qData) {
@@ -50,124 +49,122 @@ export default function GameHostPage() {
     load()
   }, [id, router, supabase])
 
-  // Real-time: players joining — re-fetch full list on any change to the players table
+  // Players: poll every 3s + realtime (client-side filtered)
   useEffect(() => {
-    function refetchPlayers() {
+    function refetch() {
       supabase.from('players').select('*').eq('game_id', id).order('score', { ascending: false })
         .then(({ data }) => setPlayers(data || []))
     }
-
-    // Initial load
-    refetchPlayers()
-
-    // Polling fallback every 3s ensures the lobby stays live even if realtime
-    // isn't configured yet (REPLICA IDENTITY FULL not set in Supabase)
-    const poll = setInterval(refetchPlayers, 3000)
-
-    // Realtime subscription (works once REPLICA IDENTITY FULL is set)
-    const sub = supabase
-      .channel(`game-${id}-players`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' },
-        (payload) => {
-          // Filter client-side so we only react to this game's players
-          const row = (payload.new || payload.old) as { game_id?: string } | null
-          if (!row || row.game_id !== id) return
-          refetchPlayers()
-        }
-      )
+    refetch()
+    const poll = setInterval(refetch, 3000)
+    const sub = supabase.channel(`host-players-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
+        const row = (payload.new || payload.old) as { game_id?: string } | null
+        if (row?.game_id === id) refetch()
+      })
       .subscribe()
-
-    return () => {
-      clearInterval(poll)
-      supabase.removeChannel(sub)
-    }
+    return () => { clearInterval(poll); supabase.removeChannel(sub) }
   }, [id, supabase])
 
-  // Real-time: game state changes
+  // Game state: poll every 2s + realtime (client-side filtered)
   useEffect(() => {
-    const sub = supabase
-      .channel(`game-${id}-state`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
-        ({ new: updated }) => setGame(updated as Game)
-      )
+    function refetch() {
+      supabase.from('games').select('*').eq('id', id).single()
+        .then(({ data }) => { if (data) setGame(data) })
+    }
+    const poll = setInterval(refetch, 2000)
+    const sub = supabase.channel(`host-game-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, ({ new: updated }) => {
+        const g = updated as Game
+        if (g.id === id) setGame(g)
+      })
       .subscribe()
-    return () => { supabase.removeChannel(sub) }
+    return () => { clearInterval(poll); supabase.removeChannel(sub) }
   }, [id, supabase])
+
+  // Answer counts: poll + realtime
+  useEffect(() => {
+    if (!currentQuestion) return
+    function refetch() {
+      supabase.from('answers').select('selected_answer').eq('question_id', currentQuestion!.id)
+        .then(({ data }) => {
+          const counts = { A: 0, B: 0, C: 0, D: 0 }
+          data?.forEach(a => { counts[a.selected_answer as keyof typeof counts]++ })
+          setAnswerCounts(counts)
+        })
+    }
+    refetch()
+    const poll = setInterval(refetch, 2000)
+    const sub = supabase.channel(`host-answers-${currentQuestion.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' }, (payload) => {
+        const row = payload.new as { question_id?: string } | null
+        if (row?.question_id === currentQuestion.id) refetch()
+      })
+      .subscribe()
+    return () => { clearInterval(poll); supabase.removeChannel(sub) }
+  }, [currentQuestion?.id, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Countdown timer
   useEffect(() => {
     if (!game || game.status !== 'question' || !currentQuestion || !game.current_question_started_at) return
+    const startedAt = new Date(game.current_question_started_at).getTime()
     const tick = setInterval(() => {
-      const elapsed = (Date.now() - new Date(game.current_question_started_at!).getTime()) / 1000
-      const left = Math.max(0, currentQuestion.time_limit - elapsed)
+      const left = Math.max(0, currentQuestion.time_limit - (Date.now() - startedAt) / 1000)
       setTimeLeft(Math.ceil(left))
       if (left <= 0) clearInterval(tick)
     }, 200)
     return () => clearInterval(tick)
-  }, [game, currentQuestion])
-
-  // Answer counts
-  useEffect(() => {
-    if (!currentQuestion || game?.status !== 'question') return
-    const sub = supabase
-      .channel(`answers-${currentQuestion.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers', filter: `question_id=eq.${currentQuestion.id}` },
-        async () => {
-          const { data } = await supabase
-            .from('answers')
-            .select('selected_answer')
-            .eq('question_id', currentQuestion.id)
-          const counts = { A: 0, B: 0, C: 0, D: 0 }
-          data?.forEach(a => { counts[a.selected_answer as keyof typeof counts]++ })
-          setAnswerCounts(counts)
-        }
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(sub) }
-  }, [currentQuestion, game?.status, supabase])
+  }, [game?.status, game?.current_question_started_at, currentQuestion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startGame = useCallback(async () => {
     setLoading(true)
-    await fetch(`/api/game/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: id }) })
-    setLoading(false)
-  }, [id])
-
-  const nextQuestion = useCallback(async () => {
-    setLoading(true)
-    const res = await fetch('/api/game/next-question', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch('/api/game/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
-    const data = await res.json()
+    // Optimistic: update question immediately from local data
+    const q = questionsRef.current[0]
+    if (q) setCurrentQuestion(q)
     setLoading(false)
-    if (data.question) setCurrentQuestion(data.question)
   }, [id])
 
   const revealAnswer = useCallback(async () => {
     setLoading(true)
     await fetch('/api/game/reveal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
+    // Optimistic local update so UI doesn't wait for realtime/poll
+    setGame(prev => prev ? { ...prev, status: 'answer_reveal' } : prev)
     const { data } = await supabase
-      .from('players')
-      .select('*')
-      .eq('game_id', id)
-      .order('score', { ascending: false })
-      .limit(10)
+      .from('players').select('*').eq('game_id', id).order('score', { ascending: false }).limit(10)
     setLeaderboard((data || []).map((p, i) => ({ player_id: p.id, nickname: p.nickname, score: p.score, rank: i + 1 })))
     setLoading(false)
   }, [id, supabase])
 
+  const nextQuestion = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch('/api/game/next-question', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id }),
+    })
+    const data = await res.json()
+    if (data.question) {
+      setCurrentQuestion(data.question)
+      setAnswerCounts({ A: 0, B: 0, C: 0, D: 0 })
+      // Optimistic local update
+      setGame(prev => prev ? { ...prev, status: 'question', current_question_index: prev.current_question_index + 1, current_question_started_at: new Date().toISOString() } : prev)
+    }
+    setLoading(false)
+  }, [id])
+
   const endGame = useCallback(async () => {
     setLoading(true)
     await fetch('/api/game/end', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
+    setGame(prev => prev ? { ...prev, status: 'finished' } : prev)
     setLoading(false)
   }, [id])
 
@@ -222,7 +219,6 @@ export default function GameHostPage() {
             </div>
           </div>
 
-          {/* Player list */}
           {players.length > 0 && (
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-6">
               <div className="flex flex-wrap gap-2 justify-center">
@@ -235,12 +231,9 @@ export default function GameHostPage() {
             </div>
           )}
 
-          <button
-            onClick={startGame}
-            disabled={loading || players.length === 0}
+          <button onClick={startGame} disabled={loading || players.length === 0}
             className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
-            style={{ fontFamily: "'Fredoka One', cursive" }}
-          >
+            style={{ fontFamily: "'Fredoka One', cursive" }}>
             {loading ? 'Starting...' : players.length === 0 ? 'Waiting for players...' : `Start Game (${players.length} players) 🚀`}
           </button>
         </div>
@@ -254,12 +247,10 @@ export default function GameHostPage() {
             <span>{players.length} players</span>
           </div>
 
-          {/* Question card */}
           <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6 mb-4 text-center">
             <p className="text-white font-bold text-2xl md:text-3xl">{currentQuestion.question_text}</p>
           </div>
 
-          {/* Timer bar */}
           {game.status === 'question' && (
             <div className="mb-4">
               <div className="flex justify-between text-sm text-white/60 mb-1">
@@ -267,29 +258,28 @@ export default function GameHostPage() {
                 <span className={`font-bold text-lg ${timeLeft <= 5 ? 'text-kawared' : 'text-kawaYellow'}`}>{timeLeft}s</span>
               </div>
               <div className="h-4 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
-                  style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }}
-                />
+                <div className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
+                  style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }} />
               </div>
             </div>
           )}
 
-          {/* Answer options with counts */}
           <div className="grid grid-cols-2 gap-3 mb-4">
-            {(['A','B','C','D'] as const).map(opt => {
+            {(['A', 'B', 'C', 'D'] as const).map(opt => {
               const color = ANSWER_COLORS[opt]
               const count = answerCounts[opt]
               const pct = totalAnswers > 0 ? (count / totalAnswers) * 100 : 0
               const isCorrect = currentQuestion.correct_answer === opt
               return (
-                <div
-                  key={opt}
-                  className={`${color.bg} ${color.text} rounded-xl p-3 relative overflow-hidden ${game.status === 'answer_reveal' && isCorrect ? 'ring-4 ring-white' : ''} ${game.status === 'answer_reveal' && !isCorrect ? 'opacity-50' : ''}`}
-                >
+                <div key={opt}
+                  className={`${color.bg} ${color.text} rounded-xl p-3 relative overflow-hidden
+                    ${game.status === 'answer_reveal' && isCorrect ? 'ring-4 ring-white' : ''}
+                    ${game.status === 'answer_reveal' && !isCorrect ? 'opacity-50' : ''}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{color.shape}</span>
-                    <span className="font-bold truncate">{currentQuestion[`option_${opt.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d']}</span>
+                    <span className="font-bold truncate">
+                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
+                    </span>
                     {game.status === 'answer_reveal' && isCorrect && <span className="ml-auto text-xl">✓</span>}
                   </div>
                   <div className="flex items-center gap-2">
@@ -307,14 +297,13 @@ export default function GameHostPage() {
             {totalAnswers} / {players.length} answered
           </div>
 
-          {/* Leaderboard preview */}
           {game.status === 'answer_reveal' && leaderboard.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
               <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Top Players</h3>
               <div className="space-y-2">
                 {leaderboard.slice(0, 5).map((entry, i) => (
                   <div key={entry.player_id} className="flex items-center gap-3">
-                    <span className="text-2xl">{['🥇','🥈','🥉','4️⃣','5️⃣'][i]}</span>
+                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]}</span>
                     <span className="flex-1 text-white font-semibold">{entry.nickname}</span>
                     <span className="text-kawaYellow font-bold">{entry.score.toLocaleString()} pts</span>
                   </div>
@@ -323,40 +312,28 @@ export default function GameHostPage() {
             </div>
           )}
 
-          {/* Controls */}
           <div className="flex gap-3">
             {game.status === 'question' && (
-              <button
-                onClick={revealAnswer}
-                disabled={loading}
+              <button onClick={revealAnswer} disabled={loading}
                 className="flex-1 bg-kawaCoral hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
-                style={{ fontFamily: "'Fredoka One', cursive" }}
-              >
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? '...' : 'Reveal Answer →'}
               </button>
             )}
             {game.status === 'answer_reveal' && (
-              <>
-                {!isLast ? (
-                  <button
-                    onClick={nextQuestion}
-                    disabled={loading}
-                    className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
-                    style={{ fontFamily: "'Fredoka One', cursive" }}
-                  >
-                    {loading ? '...' : 'Next Question →'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={endGame}
-                    disabled={loading}
-                    className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
-                    style={{ fontFamily: "'Fredoka One', cursive" }}
-                  >
-                    {loading ? '...' : '🏆 End Game & Final Scores'}
-                  </button>
-                )}
-              </>
+              !isLast ? (
+                <button onClick={nextQuestion} disabled={loading}
+                  className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                  style={{ fontFamily: "'Fredoka One', cursive" }}>
+                  {loading ? '...' : 'Next Question →'}
+                </button>
+              ) : (
+                <button onClick={endGame} disabled={loading}
+                  className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                  style={{ fontFamily: "'Fredoka One', cursive" }}>
+                  {loading ? '...' : '🏆 End Game & Final Scores'}
+                </button>
+              )
             )}
           </div>
         </div>
@@ -366,24 +343,20 @@ export default function GameHostPage() {
       {game.status === 'finished' && (
         <div className="max-w-lg mx-auto text-center">
           <div className="text-6xl mb-4 animate-bounce-in">🏆</div>
-          <h2 className="text-white font-bold text-4xl mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>
-            Game Over!
-          </h2>
+          <h2 className="text-white font-bold text-4xl mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>Game Over!</h2>
           <p className="text-purple-300 mb-6">Final Leaderboard</p>
           <div className="bg-white/10 border border-white/20 rounded-2xl p-6 space-y-3">
             {players.slice(0, 10).map((p, i) => (
               <div key={p.id} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-kawaYellow/20 border border-kawaYellow/40' : 'bg-white/5'}`}>
-                <span className="text-2xl w-8">{['🥇','🥈','🥉'][i] || `${i+1}.`}</span>
+                <span className="text-2xl w-8">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`}</span>
                 <span className="flex-1 text-white font-bold text-left">{p.nickname}</span>
                 <span className="text-kawaYellow font-bold">{p.score.toLocaleString()} pts</span>
               </div>
             ))}
           </div>
-          <a
-            href="/host"
+          <a href="/host"
             className="mt-6 inline-block bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl px-8 py-4 rounded-2xl transition-all hover:scale-105"
-            style={{ fontFamily: "'Fredoka One', cursive" }}
-          >
+            style={{ fontFamily: "'Fredoka One', cursive" }}>
             🎮 Play Again
           </a>
         </div>

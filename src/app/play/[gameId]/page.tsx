@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, QuizQuestion, Player } from '@/types'
 
 const ANSWER_CONFIG = {
-  A: { bg: 'bg-kawared hover:bg-red-500', shape: '▲', label: 'A' },
-  B: { bg: 'bg-kawaBlue hover:bg-blue-600', shape: '◆', label: 'B' },
-  C: { bg: 'bg-kawaYellow hover:bg-yellow-400 text-kawaDark', shape: '●', label: 'C' },
-  D: { bg: 'bg-kawaGreen hover:bg-green-400', shape: '■', label: 'D' },
+  A: { bg: 'bg-kawared hover:bg-red-500', shape: '▲' },
+  B: { bg: 'bg-kawaBlue hover:bg-blue-600', shape: '◆' },
+  C: { bg: 'bg-kawaYellow hover:bg-yellow-400 text-kawaDark', shape: '●' },
+  D: { bg: 'bg-kawaGreen hover:bg-green-400', shape: '■' },
 } as const
 
 type AnswerKey = 'A' | 'B' | 'C' | 'D'
@@ -19,7 +19,9 @@ export default function PlayPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const playerId = searchParams.get('playerId')
-  const supabase = createClient()
+
+  // Stable client — never recreated
+  const supabase = useMemo(() => createClient(), [])
 
   const [game, setGame] = useState<Game | null>(null)
   const [player, setPlayer] = useState<Player | null>(null)
@@ -29,84 +31,107 @@ export default function PlayPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [leaderboard, setLeaderboard] = useState<Player[]>([])
   const [myRank, setMyRank] = useState<number | null>(null)
-  const joinedAt = useRef<number>(Date.now())
 
+  // Keep current game in a ref so async callbacks always see the latest value
+  const gameRef = useRef<Game | null>(null)
+  gameRef.current = game
+
+  // Load player once
   useEffect(() => {
     if (!playerId) { router.push('/'); return }
     supabase.from('players').select('*').eq('id', playerId).single()
-      .then(({ data }) => setPlayer(data))
+      .then(({ data }) => { if (data) setPlayer(data) })
   }, [playerId, router, supabase])
 
-  // Load game state
+  // Handle a game state update
+  const handleGameUpdate = useCallback(async (g: Game) => {
+    setGame(g)
+
+    if (g.status === 'question') {
+      const { data: questions } = await supabase
+        .from('quiz_questions')
+        .select('*')
+        .eq('game_id', gameId)
+        .order('order_index')
+      const q = questions?.[g.current_question_index]
+      if (q) {
+        setCurrentQuestion(q)
+        setSelectedAnswer(null)
+        setAnswerResult(null)
+      }
+    }
+
+    if (g.status === 'answer_reveal') {
+      const { data: players } = await supabase
+        .from('players').select('*').eq('game_id', gameId).order('score', { ascending: false })
+      setLeaderboard(players || [])
+      const rank = (players || []).findIndex(p => p.id === playerId) + 1
+      setMyRank(rank > 0 ? rank : null)
+    }
+  }, [gameId, playerId, supabase])
+
+  // Initial load + polling fallback every 2s
   useEffect(() => {
-    supabase.from('games').select('*').eq('id', gameId).single()
-      .then(({ data }) => {
-        if (!data) { router.push('/'); return }
+    async function fetchGame() {
+      const { data } = await supabase.from('games').select('*').eq('id', gameId).single()
+      if (!data) { router.push('/'); return }
+      // Only trigger a full update if something actually changed
+      const prev = gameRef.current
+      if (!prev || prev.status !== data.status || prev.current_question_index !== data.current_question_index) {
+        handleGameUpdate(data)
+      } else {
         setGame(data)
-      })
-  }, [gameId, router, supabase])
+      }
+    }
 
-  // Real-time game updates
-  useEffect(() => {
+    fetchGame()
+    const poll = setInterval(fetchGame, 2000)
+
+    // Realtime subscription — no server-side filter (client-side filter below)
     const sub = supabase
-      .channel(`play-${gameId}`)
-      .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}`,
-      }, async ({ new: updated }) => {
-        const g = updated as Game
-        setGame(g)
-
-        if (g.status === 'question') {
-          // Load the current question
-          const { data: questions } = await supabase
-            .from('quiz_questions')
-            .select('*')
-            .eq('game_id', gameId)
-            .order('order_index')
-          const q = questions?.[g.current_question_index]
-          if (q) {
-            setCurrentQuestion(q)
-            setSelectedAnswer(null)
-            setAnswerResult(null)
-            joinedAt.current = Date.now()
+      .channel(`play-game-${gameId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' },
+        ({ new: updated }) => {
+          const g = updated as Game
+          if (g.id !== gameId) return
+          const prev = gameRef.current
+          if (!prev || prev.status !== g.status || prev.current_question_index !== g.current_question_index) {
+            handleGameUpdate(g)
+          } else {
+            setGame(g)
           }
         }
-
-        if (g.status === 'answer_reveal') {
-          // Load leaderboard
-          const { data: players } = await supabase
-            .from('players').select('*').eq('game_id', gameId).order('score', { ascending: false })
-          setLeaderboard(players || [])
-          const rank = (players || []).findIndex(p => p.id === playerId) + 1
-          setMyRank(rank || null)
-        }
-      })
+      )
       .subscribe()
-    return () => { supabase.removeChannel(sub) }
-  }, [gameId, playerId, supabase])
+
+    return () => {
+      clearInterval(poll)
+      supabase.removeChannel(sub)
+    }
+  }, [gameId, router, supabase, handleGameUpdate])
 
   // Countdown timer
   useEffect(() => {
     if (!game || game.status !== 'question' || !currentQuestion || !game.current_question_started_at) return
+    const startedAt = new Date(game.current_question_started_at).getTime()
     const tick = setInterval(() => {
-      const elapsed = (Date.now() - new Date(game.current_question_started_at!).getTime()) / 1000
-      const left = Math.max(0, currentQuestion.time_limit - elapsed)
+      const left = Math.max(0, currentQuestion.time_limit - (Date.now() - startedAt) / 1000)
       setTimeLeft(Math.ceil(left))
       if (left <= 0) clearInterval(tick)
     }, 200)
     return () => clearInterval(tick)
-  }, [game, currentQuestion])
+  }, [game?.status, game?.current_question_started_at, currentQuestion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitAnswer = useCallback(async (answer: AnswerKey) => {
-    if (selectedAnswer || !currentQuestion || !playerId) return
+    const g = gameRef.current
+    if (selectedAnswer || !currentQuestion || !playerId || !g?.current_question_started_at) return
     setSelectedAnswer(answer)
-    const responseTime = Date.now() - new Date(game!.current_question_started_at!).getTime()
+    const responseTime = Date.now() - new Date(g.current_question_started_at).getTime()
     const res = await fetch('/api/game/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        gameId,
-        playerId,
+        gameId, playerId,
         questionId: currentQuestion.id,
         selectedAnswer: answer,
         responseTimeMs: responseTime,
@@ -114,8 +139,8 @@ export default function PlayPage() {
     })
     const data = await res.json()
     setAnswerResult({ correct: data.isCorrect, points: data.pointsEarned })
-    if (player) setPlayer(prev => prev ? { ...prev, score: prev.score + data.pointsEarned } : prev)
-  }, [selectedAnswer, currentQuestion, playerId, game, gameId, player])
+    setPlayer(prev => prev ? { ...prev, score: prev.score + (data.pointsEarned || 0) } : prev)
+  }, [selectedAnswer, currentQuestion, playerId, gameId])
 
   if (!game || !player) {
     return (
@@ -145,16 +170,11 @@ export default function PlayPage() {
               {player.nickname}
             </p>
           </div>
-          <div className="mt-8 flex justify-center">
-            <div className="flex gap-1">
-              {[0,1,2].map(i => (
-                <div
-                  key={i}
-                  className="w-3 h-3 rounded-full bg-kawaPurple animate-bounce"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </div>
+          <div className="mt-8 flex justify-center gap-1">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="w-3 h-3 rounded-full bg-kawaPurple animate-bounce"
+                style={{ animationDelay: `${i * 0.2}s` }} />
+            ))}
           </div>
         </div>
       </div>
@@ -166,43 +186,36 @@ export default function PlayPage() {
     const progress = (timeLeft / currentQuestion.time_limit) * 100
     return (
       <div className="min-h-screen bg-kawaDark flex flex-col">
-        {/* Timer bar */}
         <div className="h-3 bg-white/10">
           <div
             className={`h-full transition-all duration-200 ${timeLeft <= 5 ? 'bg-kawared' : 'bg-kawaYellow'}`}
             style={{ width: `${progress}%` }}
           />
         </div>
-
         <div className="flex-1 flex flex-col p-4">
-          {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-white/50 text-sm font-semibold">{player.nickname}</span>
-            <span className={`font-bold text-2xl ${timeLeft <= 5 ? 'text-kawared animate-pulse' : 'text-kawaYellow'}`} style={{ fontFamily: "'Fredoka One', cursive" }}>
+            <span className={`font-bold text-2xl ${timeLeft <= 5 ? 'text-kawared animate-pulse' : 'text-kawaYellow'}`}
+              style={{ fontFamily: "'Fredoka One', cursive" }}>
               {timeLeft}s
             </span>
             <span className="text-white/50 text-sm font-semibold">{player.score.toLocaleString()} pts</span>
           </div>
 
-          {/* Question */}
           <div className="bg-white text-kawaDark rounded-2xl p-5 mb-6 text-center flex-shrink-0 shadow-xl">
             <p className="font-bold text-xl md:text-2xl leading-tight">{currentQuestion.question_text}</p>
           </div>
 
-          {/* Answer buttons */}
           {!selectedAnswer ? (
             <div className="grid grid-cols-2 gap-3 flex-1">
-              {(['A','B','C','D'] as AnswerKey[]).map(opt => {
+              {(['A', 'B', 'C', 'D'] as AnswerKey[]).map(opt => {
                 const cfg = ANSWER_CONFIG[opt]
                 return (
-                  <button
-                    key={opt}
-                    onClick={() => submitAnswer(opt)}
-                    className={`${cfg.bg} text-white font-bold rounded-2xl flex flex-col items-center justify-center gap-2 p-4 min-h-[120px] transition-all hover:scale-105 active:scale-95 shadow-lg`}
-                  >
+                  <button key={opt} onClick={() => submitAnswer(opt)}
+                    className={`${cfg.bg} text-white font-bold rounded-2xl flex flex-col items-center justify-center gap-2 p-4 min-h-[120px] transition-all hover:scale-105 active:scale-95 shadow-lg`}>
                     <span className="text-3xl">{cfg.shape}</span>
                     <span className="text-sm text-center leading-tight">
-                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d']}
+                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
                     </span>
                   </button>
                 )
@@ -217,16 +230,16 @@ export default function PlayPage() {
                     {answerResult.correct ? 'Correct!' : 'Oops!'}
                   </p>
                   {answerResult.correct && (
-                    <p className="text-kawaYellow font-bold text-2xl animate-score-pop">
-                      +{answerResult.points} pts
-                    </p>
+                    <p className="text-kawaYellow font-bold text-2xl">+{answerResult.points} pts</p>
                   )}
                   <p className="text-white/50 mt-4">Waiting for reveal...</p>
                 </div>
               ) : (
                 <div className="text-center">
                   <div className="text-5xl mb-4 animate-bounce">⏳</div>
-                  <p className="text-white font-bold text-xl">Answer locked in: <span className="text-kawaYellow">{selectedAnswer}</span></p>
+                  <p className="text-white font-bold text-xl">
+                    Locked in: <span className="text-kawaYellow">{selectedAnswer}</span>
+                  </p>
                   <p className="text-white/50 mt-2">Waiting for results...</p>
                 </div>
               )}
@@ -237,12 +250,11 @@ export default function PlayPage() {
     )
   }
 
-  // ANSWER REVEAL / LEADERBOARD
+  // ANSWER REVEAL
   if (game.status === 'answer_reveal') {
     return (
       <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 text-center">
         <div className="w-full max-w-sm">
-          {/* Result */}
           {answerResult ? (
             <div className="mb-6 animate-bounce-in">
               <div className="text-6xl mb-3">{answerResult.correct ? '🎉' : '😬'}</div>
@@ -259,7 +271,6 @@ export default function PlayPage() {
             </div>
           )}
 
-          {/* My rank */}
           {myRank && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
               <p className="text-white/50 text-sm mb-1">Your Rank</p>
@@ -270,17 +281,14 @@ export default function PlayPage() {
             </div>
           )}
 
-          {/* Mini leaderboard */}
           {leaderboard.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
               <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-widest">Leaderboard</h3>
               <div className="space-y-2">
                 {leaderboard.slice(0, 5).map((p, i) => (
-                  <div
-                    key={p.id}
-                    className={`flex items-center gap-2 p-2 rounded-xl ${p.id === playerId ? 'bg-kawaPurple/30 border border-kawaPurple' : ''}`}
-                  >
-                    <span className="text-lg w-6">{['🥇','🥈','🥉','4','5'][i]}</span>
+                  <div key={p.id}
+                    className={`flex items-center gap-2 p-2 rounded-xl ${p.id === playerId ? 'bg-kawaPurple/30 border border-kawaPurple' : ''}`}>
+                    <span className="text-lg w-6">{['🥇', '🥈', '🥉', '4', '5'][i]}</span>
                     <span className={`flex-1 text-left text-sm font-semibold ${p.id === playerId ? 'text-kawaYellow' : 'text-white'}`}>
                       {p.nickname}
                     </span>
@@ -313,11 +321,9 @@ export default function PlayPage() {
           </p>
           {myRank && <p className="text-white/60 mt-1">Rank #{myRank}</p>}
         </div>
-        <a
-          href="/"
+        <a href="/"
           className="bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl px-8 py-4 rounded-2xl transition-all hover:scale-105"
-          style={{ fontFamily: "'Fredoka One', cursive" }}
-        >
+          style={{ fontFamily: "'Fredoka One', cursive" }}>
           Play Again →
         </a>
       </div>
