@@ -27,7 +27,7 @@ export default function PlayPage() {
   const [player, setPlayer] = useState<Player | null>(null)
   const [currentQuestion, setCurrentQuestion] = useState<QuizQuestion | null>(null)
   const [selectedAnswer, setSelectedAnswer] = useState<AnswerKey | null>(null)
-  const [answerResult, setAnswerResult] = useState<{ correct: boolean; points: number } | null>(null)
+  const [answerResult, setAnswerResult] = useState<{ correct: boolean; points: number; selected: AnswerKey; correctAnswer: AnswerKey } | null>(null)
   const [timeLeft, setTimeLeft] = useState(0)
   const [leaderboard, setLeaderboard] = useState<Player[]>([])
   const [myRank, setMyRank] = useState<number | null>(null)
@@ -75,12 +75,17 @@ export default function PlayPage() {
       if (playerId && currentQuestionRef.current) {
         const { data: answer } = await supabase
           .from('answers')
-          .select('is_correct, points_earned')
+          .select('is_correct, points_earned, selected_answer')
           .eq('player_id', playerId)
           .eq('question_id', currentQuestionRef.current.id)
           .single()
         if (answer) {
-          setAnswerResult({ correct: answer.is_correct, points: answer.points_earned })
+          setAnswerResult({
+            correct: answer.is_correct,
+            points: answer.points_earned,
+            selected: answer.selected_answer as AnswerKey,
+            correctAnswer: currentQuestionRef.current.correct_answer as AnswerKey,
+          })
           // Update displayed score from the authoritative DB value
           const me = (players || []).find(p => p.id === playerId)
           if (me) setPlayer(prev => prev ? { ...prev, score: me.score } : prev)
@@ -253,44 +258,97 @@ export default function PlayPage() {
   }
 
   // ANSWER REVEAL
-  if (game.status === 'answer_reveal') {
+  if (game.status === 'answer_reveal' && currentQuestion) {
+    const optionLabels: Record<string, string> = {
+      A: currentQuestion.option_a,
+      B: currentQuestion.option_b,
+      C: currentQuestion.option_c,
+      D: currentQuestion.option_d,
+    }
+    const optionColors: Record<string, string> = {
+      A: 'bg-kawared',
+      B: 'bg-kawaBlue',
+      C: 'bg-kawaYellow text-kawaDark',
+      D: 'bg-kawaGreen',
+    }
+
     return (
-      <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 text-center">
-        <div className="w-full max-w-sm">
+      <div className="min-h-screen bg-kawaDark flex flex-col px-4 py-6 overflow-y-auto">
+        <div className="w-full max-w-sm mx-auto space-y-4">
+
+          {/* Result banner */}
           {answerResult ? (
-            <div className="mb-6 animate-bounce-in">
-              <div className="text-6xl mb-3">{answerResult.correct ? '🎉' : '😬'}</div>
-              <p className="text-white font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+            <div className={`rounded-2xl p-4 text-center animate-bounce-in ${answerResult.correct ? 'bg-kawaGreen/20 border border-kawaGreen/50' : 'bg-kawared/20 border border-kawared/50'}`}>
+              <div className="text-5xl mb-2">{answerResult.correct ? '🎉' : '😬'}</div>
+              <p className="text-white font-bold text-2xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {answerResult.correct ? 'Correct!' : 'Not quite!'}
               </p>
               {answerResult.correct && (
-                <p className="text-kawaYellow font-bold text-xl">+{answerResult.points} points</p>
+                <p className="text-kawaYellow font-bold text-lg">+{answerResult.points} points</p>
               )}
             </div>
           ) : (
-            <div className="mb-6">
-              <p className="text-white/50 text-lg">Time&apos;s up!</p>
+            <div className="rounded-2xl p-4 text-center bg-white/10 border border-white/20">
+              <p className="text-white/60">You didn&apos;t answer in time</p>
             </div>
           )}
 
+          {/* Question */}
+          <div className="bg-white text-kawaDark rounded-2xl p-4 text-center">
+            <p className="font-bold text-base leading-snug">{currentQuestion.question_text}</p>
+          </div>
+
+          {/* All 4 options — highlight correct + what player chose */}
+          <div className="grid grid-cols-2 gap-2">
+            {(['A', 'B', 'C', 'D'] as AnswerKey[]).map(opt => {
+              const isCorrect = opt === answerResult?.correctAnswer
+              const isPicked = opt === answerResult?.selected
+              const base = optionColors[opt]
+              return (
+                <div
+                  key={opt}
+                  className={`${base} rounded-xl p-3 text-white relative transition-all
+                    ${isCorrect ? 'ring-4 ring-white scale-105' : 'opacity-50'}
+                  `}
+                >
+                  <p className="font-bold text-xs leading-tight">{optionLabels[opt]}</p>
+                  {/* Badges */}
+                  <div className="flex gap-1 mt-1.5 flex-wrap">
+                    {isCorrect && (
+                      <span className="bg-white/30 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">✓ Correct</span>
+                    )}
+                    {isPicked && !isCorrect && (
+                      <span className="bg-black/30 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">✗ Your pick</span>
+                    )}
+                    {isPicked && isCorrect && (
+                      <span className="bg-white/30 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">Your pick</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Rank */}
           {myRank && (
-            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
-              <p className="text-white/50 text-sm mb-1">Your Rank</p>
-              <p className="text-kawaYellow font-bold text-4xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                #{myRank}
-              </p>
-              <p className="text-white font-semibold">{player.score.toLocaleString()} pts total</p>
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3">
+              <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>#{myRank}</p>
+              <div>
+                <p className="text-white font-semibold text-sm">Your Rank</p>
+                <p className="text-white/50 text-xs">{player.score.toLocaleString()} pts total</p>
+              </div>
             </div>
           )}
 
+          {/* Leaderboard */}
           {leaderboard.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
-              <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-widest">Leaderboard</h3>
+              <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Leaderboard</h3>
               <div className="space-y-2">
                 {leaderboard.slice(0, 5).map((p, i) => (
                   <div key={p.id}
                     className={`flex items-center gap-2 p-2 rounded-xl ${p.id === playerId ? 'bg-kawaPurple/30 border border-kawaPurple' : ''}`}>
-                    <span className="text-lg w-6">{['🥇', '🥈', '🥉', '4', '5'][i]}</span>
+                    <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i]}</span>
                     <span className={`flex-1 text-left text-sm font-semibold ${p.id === playerId ? 'text-kawaYellow' : 'text-white'}`}>
                       {p.nickname}
                     </span>
@@ -301,7 +359,7 @@ export default function PlayPage() {
             </div>
           )}
 
-          <p className="text-white/30 text-sm mt-4 animate-pulse">Waiting for next question...</p>
+          <p className="text-white/30 text-xs text-center animate-pulse">Waiting for next question...</p>
         </div>
       </div>
     )
