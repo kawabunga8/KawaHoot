@@ -178,7 +178,7 @@ export default function GameHostPage() {
             {game.title}
           </h1>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/rcs-logo.png" alt="RCS" className="h-12 mt-2" />
+          <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3" />
         </div>
         <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
           <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>

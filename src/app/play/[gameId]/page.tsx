@@ -224,9 +224,12 @@ export default function PlayPage() {
             <span className="text-white/50 text-sm font-semibold">{player.score.toLocaleString()} pts</span>
           </div>
 
-          <div className="bg-white text-kawaDark rounded-2xl p-5 mb-6 text-center flex-shrink-0 shadow-xl">
-            <p className="font-bold text-xl md:text-2xl leading-tight">{currentQuestion.question_text}</p>
-          </div>
+          {/* Question only shown after answering — keeps focus on the buttons */}
+          {selectedAnswer && (
+            <div className="bg-white text-kawaDark rounded-2xl p-5 mb-6 text-center flex-shrink-0 shadow-xl animate-slide-up">
+              <p className="font-bold text-xl md:text-2xl leading-tight">{currentQuestion.question_text}</p>
+            </div>
+          )}
 
           {!selectedAnswer ? (
             <div className="grid grid-cols-2 gap-3 flex-1">
