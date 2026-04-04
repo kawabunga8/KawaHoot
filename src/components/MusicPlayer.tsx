@@ -2,241 +2,78 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-// ---------------------------------------------------------------------------
-// Procedural game music engine (Web Audio API — no external files needed)
-// ---------------------------------------------------------------------------
-
-type NoteEvent = { time: number; freq: number; dur: number; gain: number }
-
-const SONGS: { name: string; emoji: string; bpm: number; notes: NoteEvent[] }[] = (() => {
-  // Helper: convert semitones above A4 (440Hz) to frequency
-  const n = (semitones: number) => 440 * Math.pow(2, semitones / 12)
-
-  // Song 1 — "Quiz Time" upbeat looping melody
-  const quizNotes: NoteEvent[] = [
-    { time: 0.00, freq: n(0),  dur: 0.18, gain: 0.18 },
-    { time: 0.25, freq: n(3),  dur: 0.18, gain: 0.18 },
-    { time: 0.50, freq: n(5),  dur: 0.18, gain: 0.18 },
-    { time: 0.75, freq: n(7),  dur: 0.35, gain: 0.22 },
-    { time: 1.00, freq: n(5),  dur: 0.18, gain: 0.18 },
-    { time: 1.25, freq: n(3),  dur: 0.18, gain: 0.18 },
-    { time: 1.50, freq: n(0),  dur: 0.18, gain: 0.18 },
-    { time: 1.75, freq: n(-2), dur: 0.35, gain: 0.22 },
-    { time: 2.00, freq: n(3),  dur: 0.18, gain: 0.18 },
-    { time: 2.25, freq: n(7),  dur: 0.18, gain: 0.18 },
-    { time: 2.50, freq: n(10), dur: 0.18, gain: 0.18 },
-    { time: 2.75, freq: n(12), dur: 0.35, gain: 0.25 },
-    { time: 3.00, freq: n(10), dur: 0.18, gain: 0.18 },
-    { time: 3.25, freq: n(7),  dur: 0.18, gain: 0.18 },
-    { time: 3.50, freq: n(5),  dur: 0.18, gain: 0.18 },
-    { time: 3.75, freq: n(3),  dur: 0.35, gain: 0.22 },
-  ]
-
-  // Song 2 — "Think Fast" faster, punchier
-  const thinkNotes: NoteEvent[] = [
-    { time: 0.00, freq: n(0),  dur: 0.12, gain: 0.22 },
-    { time: 0.15, freq: n(5),  dur: 0.12, gain: 0.20 },
-    { time: 0.30, freq: n(7),  dur: 0.12, gain: 0.20 },
-    { time: 0.45, freq: n(12), dur: 0.25, gain: 0.25 },
-    { time: 0.75, freq: n(10), dur: 0.12, gain: 0.20 },
-    { time: 0.90, freq: n(7),  dur: 0.12, gain: 0.20 },
-    { time: 1.05, freq: n(5),  dur: 0.12, gain: 0.20 },
-    { time: 1.20, freq: n(3),  dur: 0.25, gain: 0.22 },
-    { time: 1.50, freq: n(3),  dur: 0.12, gain: 0.20 },
-    { time: 1.65, freq: n(7),  dur: 0.12, gain: 0.20 },
-    { time: 1.80, freq: n(10), dur: 0.12, gain: 0.20 },
-    { time: 1.95, freq: n(14), dur: 0.30, gain: 0.28 },
-    { time: 2.30, freq: n(12), dur: 0.12, gain: 0.22 },
-    { time: 2.45, freq: n(10), dur: 0.12, gain: 0.20 },
-    { time: 2.60, freq: n(7),  dur: 0.12, gain: 0.20 },
-    { time: 2.75, freq: n(5),  dur: 0.40, gain: 0.25 },
-  ]
-
-  // Song 3 — "Winners" triumphant, slightly lower tempo
-  const winNotes: NoteEvent[] = [
-    { time: 0.00, freq: n(-5), dur: 0.22, gain: 0.22 },
-    { time: 0.30, freq: n(0),  dur: 0.22, gain: 0.22 },
-    { time: 0.60, freq: n(4),  dur: 0.22, gain: 0.22 },
-    { time: 0.90, freq: n(7),  dur: 0.40, gain: 0.28 },
-    { time: 1.40, freq: n(9),  dur: 0.22, gain: 0.24 },
-    { time: 1.70, freq: n(12), dur: 0.40, gain: 0.30 },
-    { time: 2.20, freq: n(9),  dur: 0.22, gain: 0.24 },
-    { time: 2.50, freq: n(7),  dur: 0.22, gain: 0.22 },
-    { time: 2.80, freq: n(4),  dur: 0.22, gain: 0.22 },
-    { time: 3.10, freq: n(0),  dur: 0.55, gain: 0.28 },
-  ]
-
-  return [
-    { name: 'Quiz Time',  emoji: '🎯', bpm: 120, notes: quizNotes  },
-    { name: 'Think Fast', emoji: '⚡', bpm: 140, notes: thinkNotes  },
-    { name: 'Winners',    emoji: '🏆', bpm: 100, notes: winNotes    },
-  ]
-})()
-
-function playLoop(
-  ctx: AudioContext,
-  song: (typeof SONGS)[0],
-  masterGain: GainNode,
-  onLoop: () => void
-): () => void {
-  let stopped = false
-  const loopDuration = (60 / song.bpm) * 8 // 8 beats per loop
-
-  function scheduleMelody(startAt: number) {
-    if (stopped) return
-    song.notes.forEach(({ time, freq, dur, gain }) => {
-      const osc = ctx.createOscillator()
-      const g = ctx.createGain()
-      osc.type = 'square'
-      osc.frequency.value = freq
-      // Slight detune for warmth
-      osc.detune.value = -8
-
-      // Envelope
-      const t0 = startAt + time
-      g.gain.setValueAtTime(0, t0)
-      g.gain.linearRampToValueAtTime(gain, t0 + 0.01)
-      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
-
-      osc.connect(g)
-      g.connect(masterGain)
-      osc.start(t0)
-      osc.stop(t0 + dur + 0.05)
-    })
-  }
-
-  function scheduleBeat(startAt: number) {
-    if (stopped) return
-    const beatDur = 60 / song.bpm
-    for (let i = 0; i < 8; i++) {
-      const t = startAt + i * beatDur
-      // Kick on 1 and 5
-      if (i === 0 || i === 4) {
-        const buf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate)
-        const data = buf.getChannelData(0)
-        for (let j = 0; j < data.length; j++) {
-          data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (ctx.sampleRate * 0.04))
-        }
-        const src = ctx.createBufferSource()
-        const g = ctx.createGain()
-        src.buffer = buf
-        g.gain.setValueAtTime(0.18, t)
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.15)
-        src.connect(g)
-        g.connect(masterGain)
-        src.start(t)
-      }
-      // Hi-hat on every beat
-      const hBuf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate)
-      const hData = hBuf.getChannelData(0)
-      for (let j = 0; j < hData.length; j++) {
-        hData[j] = (Math.random() * 2 - 1) * Math.exp(-j / (ctx.sampleRate * 0.008))
-      }
-      const hSrc = ctx.createBufferSource()
-      const hG = ctx.createGain()
-      hSrc.buffer = hBuf
-      hG.gain.setValueAtTime(0.06, t)
-      hG.gain.exponentialRampToValueAtTime(0.001, t + 0.04)
-      hSrc.connect(hG)
-      hG.connect(masterGain)
-      hSrc.start(t)
-    }
-  }
-
-  let loopStart = ctx.currentTime + 0.05
-  scheduleMelody(loopStart)
-  scheduleBeat(loopStart)
-
-  const interval = setInterval(() => {
-    if (stopped) { clearInterval(interval); return }
-    loopStart += loopDuration
-    scheduleMelody(loopStart)
-    scheduleBeat(loopStart)
-    onLoop()
-  }, loopDuration * 1000 - 100) // schedule next loop 100ms before end
-
-  return () => { stopped = true; clearInterval(interval) }
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function MusicPlayer() {
-  const [trackIndex, setTrackIndex] = useState(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(0.4)
   const [isMinimized, setIsMinimized] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
 
-  const ctxRef = useRef<AudioContext | null>(null)
-  const masterRef = useRef<GainNode | null>(null)
-  const stopRef = useRef<(() => void) | null>(null)
-
-  const track = SONGS[trackIndex]
-
-  // Sync volume
   useEffect(() => {
-    if (masterRef.current) {
-      masterRef.current.gain.setTargetAtTime(volume, masterRef.current.context.currentTime, 0.05)
-    }
-  }, [volume])
+    const audio = new Audio('/music/little-blue.m4a')
+    audio.loop = true
+    audio.volume = volume
+    audio.preload = 'metadata'
 
-  const stop = useCallback(() => {
-    stopRef.current?.()
-    stopRef.current = null
-    setIsPlaying(false)
+    audio.addEventListener('canplay', () => setIsLoading(false))
+    audio.addEventListener('waiting', () => setIsLoading(true))
+    audio.addEventListener('loadedmetadata', () => setDuration(audio.duration))
+    audio.addEventListener('timeupdate', () => setCurrentTime(audio.currentTime))
+    audio.addEventListener('ended', () => setIsPlaying(false))
+
+    audioRef.current = audio
+    return () => { audio.pause(); audio.src = '' }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const play = useCallback((index: number) => {
-    // Create / resume AudioContext on user gesture
-    if (!ctxRef.current) {
-      const ctx = new AudioContext()
-      const master = ctx.createGain()
-      master.gain.value = volume
-      master.connect(ctx.destination)
-      ctxRef.current = ctx
-      masterRef.current = master
-    }
-    const ctx = ctxRef.current!
-    const master = masterRef.current!
-    if (ctx.state === 'suspended') ctx.resume()
-
-    stopRef.current?.()
-    const song = SONGS[index]
-    stopRef.current = playLoop(ctx, song, master, () => {})
-    setIsPlaying(true)
-    setTrackIndex(index)
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume
   }, [volume])
 
-  const togglePlay = useCallback(() => {
-    if (isPlaying) { stop() } else { play(trackIndex) }
-  }, [isPlaying, stop, play, trackIndex])
+  const togglePlay = useCallback(async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (isPlaying) {
+      audio.pause()
+      setIsPlaying(false)
+    } else {
+      setIsLoading(true)
+      try {
+        await audio.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+        setIsLoading(false)
+      }
+    }
+  }, [isPlaying])
 
-  const nextTrack = useCallback(() => {
-    const next = (trackIndex + 1) % SONGS.length
-    if (isPlaying) { play(next) } else { setTrackIndex(next) }
-  }, [trackIndex, isPlaying, play])
+  function seek(e: React.ChangeEvent<HTMLInputElement>) {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.currentTime = parseFloat(e.target.value)
+    setCurrentTime(audio.currentTime)
+  }
 
-  const prevTrack = useCallback(() => {
-    const prev = (trackIndex - 1 + SONGS.length) % SONGS.length
-    if (isPlaying) { play(prev) } else { setTrackIndex(prev) }
-  }, [trackIndex, isPlaying, play])
-
-  // Cleanup on unmount
-  useEffect(() => () => { stopRef.current?.(); ctxRef.current?.close() }, [])
+  function fmt(s: number) {
+    if (!isFinite(s)) return '0:00'
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, '0')}`
+  }
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
       <div
-        className={`bg-kawaDark/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${
-          isMinimized ? 'w-14 h-14' : 'w-68'
-        }`}
-        style={{ width: isMinimized ? 56 : 264 }}
+        className="bg-kawaDark/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300"
+        style={{ width: isMinimized ? 56 : 272 }}
       >
         {isMinimized ? (
           <button
             onClick={() => setIsMinimized(false)}
-            className="w-full h-full flex items-center justify-center rounded-2xl hover:bg-white/10 transition-colors relative"
+            className="w-14 h-14 flex items-center justify-center rounded-2xl hover:bg-white/10 transition-colors relative"
             title="Open music player"
           >
             <span className="text-xl">{isPlaying ? '🎵' : '🎶'}</span>
@@ -256,11 +93,8 @@ export default function MusicPlayer() {
                 {isPlaying && (
                   <div className="flex gap-px items-end h-3">
                     {[4, 7, 5].map((h, i) => (
-                      <div
-                        key={i}
-                        className="w-0.5 bg-kawaGreen rounded-full animate-bounce"
-                        style={{ height: h, animationDelay: `${i * 0.15}s` }}
-                      />
+                      <div key={i} className="w-0.5 bg-kawaGreen rounded-full animate-bounce"
+                        style={{ height: h, animationDelay: `${i * 0.15}s` }} />
                     ))}
                   </div>
                 )}
@@ -268,37 +102,45 @@ export default function MusicPlayer() {
               <button
                 onClick={() => setIsMinimized(true)}
                 className="text-white/30 hover:text-white/60 text-xl leading-none transition-colors w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10"
-              >
-                ×
-              </button>
+              >×</button>
             </div>
 
             {/* Track info */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-3 text-center">
-              <div className="text-xl mb-0.5">{track.emoji}</div>
-              <p className="text-white font-bold text-sm">{track.name}</p>
-              <p className="text-white/30 text-xs mt-0.5">{track.bpm} BPM · {trackIndex + 1}/{SONGS.length}</p>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-3">
+              <p className="text-white font-bold text-sm truncate">Little Blue</p>
+              <p className="text-white/40 text-xs mt-0.5 truncate">Jacob Collier feat. Brandi Carlile</p>
             </div>
 
-            {/* Transport controls */}
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <button
-                onClick={prevTrack}
-                className="text-white/50 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-sm"
-              >
-                ⏮
-              </button>
+            {/* Seek bar */}
+            {duration > 0 && (
+              <div className="mb-3">
+                <div className="relative h-5 flex items-center group">
+                  <div className="absolute inset-x-0 h-1 bg-white/15 rounded-full" />
+                  <div
+                    className="absolute left-0 h-1 bg-kawaYellow rounded-full pointer-events-none"
+                    style={{ width: `${(currentTime / duration) * 100}%` }}
+                  />
+                  <input type="range" min="0" max={duration} step="1" value={currentTime}
+                    onChange={seek}
+                    className="absolute inset-0 w-full opacity-0 cursor-pointer h-full" />
+                </div>
+                <div className="flex justify-between text-white/30 text-xs mt-1">
+                  <span>{fmt(currentTime)}</span>
+                  <span>{fmt(duration)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Play button */}
+            <div className="flex justify-center mb-3">
               <button
                 onClick={togglePlay}
-                className="w-11 h-11 bg-kawaYellow hover:bg-yellow-400 text-kawaDark rounded-full flex items-center justify-center text-lg font-bold transition-all hover:scale-110 active:scale-95 shadow-lg shadow-kawaYellow/30"
+                disabled={isLoading}
+                className="w-12 h-12 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-60 text-kawaDark rounded-full flex items-center justify-center text-xl font-bold transition-all hover:scale-110 active:scale-95 shadow-lg shadow-kawaYellow/30"
               >
-                {isPlaying ? '⏸' : '▶'}
-              </button>
-              <button
-                onClick={nextTrack}
-                className="text-white/50 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-sm"
-              >
-                ⏭
+                {isLoading
+                  ? <div className="w-4 h-4 border-2 border-kawaDark border-t-transparent rounded-full animate-spin" />
+                  : isPlaying ? '⏸' : '▶'}
               </button>
             </div>
 
@@ -310,19 +152,13 @@ export default function MusicPlayer() {
               >
                 {volume === 0 ? '🔇' : volume < 0.45 ? '🔉' : '🔊'}
               </button>
-              <div className="flex-1 relative h-5 flex items-center group">
+              <div className="flex-1 relative h-5 flex items-center">
                 <div className="absolute inset-x-0 h-1.5 bg-white/15 rounded-full" />
-                <div
-                  className="absolute left-0 h-1.5 bg-kawaYellow rounded-full pointer-events-none transition-all"
-                  style={{ width: `${volume * 100}%` }}
-                />
-                <input
-                  type="range"
-                  min="0" max="1" step="0.02"
-                  value={volume}
+                <div className="absolute left-0 h-1.5 bg-kawaYellow rounded-full pointer-events-none"
+                  style={{ width: `${volume * 100}%` }} />
+                <input type="range" min="0" max="1" step="0.02" value={volume}
                   onChange={e => setVolume(parseFloat(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
-                />
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer h-full" />
               </div>
               <span className="text-white/30 text-xs w-6 text-right flex-shrink-0">
                 {Math.round(volume * 100)}
