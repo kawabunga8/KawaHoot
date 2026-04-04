@@ -50,22 +50,37 @@ export default function GameHostPage() {
     load()
   }, [id, router, supabase])
 
-  // Real-time: players joining
+  // Real-time: players joining — re-fetch full list on any change to the players table
   useEffect(() => {
+    function refetchPlayers() {
+      supabase.from('players').select('*').eq('game_id', id).order('score', { ascending: false })
+        .then(({ data }) => setPlayers(data || []))
+    }
+
+    // Initial load
+    refetchPlayers()
+
+    // Polling fallback every 3s ensures the lobby stays live even if realtime
+    // isn't configured yet (REPLICA IDENTITY FULL not set in Supabase)
+    const poll = setInterval(refetchPlayers, 3000)
+
+    // Realtime subscription (works once REPLICA IDENTITY FULL is set)
     const sub = supabase
       .channel(`game-${id}-players`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `game_id=eq.${id}` },
-        () => {
-          supabase.from('players').select('*').eq('game_id', id).order('score', { ascending: false })
-            .then(({ data }) => setPlayers(data || []))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' },
+        (payload) => {
+          // Filter client-side so we only react to this game's players
+          const row = (payload.new || payload.old) as { game_id?: string } | null
+          if (!row || row.game_id !== id) return
+          refetchPlayers()
         }
       )
       .subscribe()
 
-    supabase.from('players').select('*').eq('game_id', id).order('score', { ascending: false })
-      .then(({ data }) => setPlayers(data || []))
-
-    return () => { supabase.removeChannel(sub) }
+    return () => {
+      clearInterval(poll)
+      supabase.removeChannel(sub)
+    }
   }, [id, supabase])
 
   // Real-time: game state changes

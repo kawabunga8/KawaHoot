@@ -76,3 +76,9 @@ create policy "Allow all on answers" on answers for all using (true) with check 
 alter publication supabase_realtime add table games;
 alter publication supabase_realtime add table players;
 alter publication supabase_realtime add table answers;
+
+-- Required for filtered realtime subscriptions (filter by non-PK columns like game_id)
+alter table games replica identity full;
+alter table players replica identity full;
+alter table answers replica identity full;
+alter table quiz_questions replica identity full;
