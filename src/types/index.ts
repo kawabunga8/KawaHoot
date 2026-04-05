@@ -16,7 +16,7 @@ export type Game = {
   pin: string
   host_id: string
   title: string
-  status: 'waiting' | 'question' | 'answer_reveal' | 'leaderboard' | 'finished'
+  status: 'waiting' | 'question' | 'answer_reveal' | 'leaderboard' | 'finished' | 'paused'
   mode: 'individual' | 'teams'
   current_question_index: number
   current_question_started_at: string | null

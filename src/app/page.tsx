@@ -11,6 +11,8 @@ export default function HomePage() {
   const [step, setStep] = useState<'pin' | 'nickname'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [gameId, setGameId] = useState('')
+  const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,6 +29,8 @@ export default function HomePage() {
       setError('Game not found. Check your PIN!')
       return
     }
+    setGameId(data.gameId)
+    setRoster(data.roster || [])
     setStep('nickname')
   }
 
@@ -122,6 +126,41 @@ export default function HomePage() {
                 {loading ? 'Checking...' : 'Find Game →'}
               </button>
             </form>
+          ) : roster.length > 0 ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setStep('pin')}
+                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
+              >
+                ← PIN: {pin}
+              </button>
+              <h2
+                className="text-2xl font-bold text-center text-white"
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                Who are you?
+              </h2>
+              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                {roster.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => router.push(`/play/${gameId}?playerId=${r.id}`)}
+                    className="bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple text-white font-bold py-3 px-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm truncate"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}
+                  >
+                    {r.nickname}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoster([])}
+                className="w-full text-white/40 hover:text-white/70 text-sm text-center transition-colors"
+              >
+                Not on the list? Type a custom name →
+              </button>
+            </div>
           ) : (
             <form onSubmit={handleJoin} className="space-y-5">
               <button

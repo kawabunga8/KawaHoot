@@ -8,7 +8,7 @@ create table if not exists games (
   host_id text,
   title text not null,
   status text not null default 'waiting'
-    check (status in ('waiting', 'question', 'answer_reveal', 'leaderboard', 'finished')),
+    check (status in ('waiting', 'question', 'answer_reveal', 'leaderboard', 'finished', 'paused')),
   current_question_index integer not null default -1,
   current_question_started_at timestamptz,
   next_game_id uuid,  -- set when host replays; players follow to this game
@@ -99,6 +99,7 @@ create table if not exists teams (
 );
 
 alter table players add column if not exists team_id uuid references teams(id) on delete set null;
+alter table players add column if not exists is_pre_registered boolean not null default false;
 
 create index if not exists idx_teams_game_id on teams(game_id);
 create index if not exists idx_players_team_id on players(team_id);

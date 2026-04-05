@@ -223,6 +223,28 @@ export default function PlayPage() {
     )
   }
 
+  // PAUSED
+  if (game.status === 'paused') {
+    return (
+      <div className="min-h-screen bg-kawaDark flex flex-col items-center justify-center px-4 text-center">
+        <div className="text-6xl mb-4">⏸</div>
+        <h1 className="text-3xl text-white font-bold mb-2" style={{ fontFamily: "'Fredoka One', cursive" }}>
+          Game Paused
+        </h1>
+        <p className="text-white/50 mb-6">The teacher is making some changes...</p>
+        <div className="bg-white/10 border border-white/20 rounded-2xl px-8 py-5 inline-block">
+          <p className="text-white/60 text-sm mb-1">Playing as</p>
+          <p className="text-kawaYellow font-bold text-2xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+            {player.nickname}
+          </p>
+          {myTeam && (
+            <p className="text-white/70 font-semibold mt-2 text-sm">👥 {myTeam.name}</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // WAITING
   if (game.status === 'waiting') {
     return (

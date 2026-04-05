@@ -6,6 +6,7 @@ import Papa from 'papaparse'
 import type { CSVRow } from '@/types'
 
 type SavedGame = { id: string; title: string; pin: string; createdAt: string }
+type KawaClass = { id: string; name: string; students: string[] }
 
 const SAMPLE_CSV = `question,option_a,option_b,option_c,option_d,correct_answer,time_limit
 What is 2 + 2?,3,4,5,6,B,20
@@ -23,13 +24,61 @@ export default function HostPage() {
   const [parseError, setParseError] = useState('')
   const [savedGames, setSavedGames] = useState<SavedGame[]>([])
   const [replayingId, setReplayingId] = useState<string | null>(null)
+  const [classes, setClasses] = useState<KawaClass[]>([])
+  const [editingClassId, setEditingClassId] = useState<string | null>(null)
+  const [newClassMode, setNewClassMode] = useState(false)
+  const [classFormName, setClassFormName] = useState('')
+  const [classFormStudents, setClassFormStudents] = useState('')
 
   useEffect(() => {
     const stored = localStorage.getItem('kawahoot_games')
     if (stored) {
       try { setSavedGames(JSON.parse(stored)) } catch {}
     }
+    const storedClasses = localStorage.getItem('kawahoot_classes')
+    if (storedClasses) {
+      try { setClasses(JSON.parse(storedClasses)) } catch {}
+    }
   }, [])
+
+  function saveClasses(updated: KawaClass[]) {
+    setClasses(updated)
+    localStorage.setItem('kawahoot_classes', JSON.stringify(updated))
+  }
+
+  function parseStudents(raw: string) {
+    return raw.split('\n').map(s => s.trim()).filter(Boolean)
+  }
+
+  function createClass() {
+    if (!classFormName.trim()) return
+    const students = parseStudents(classFormStudents)
+    const newClass: KawaClass = { id: crypto.randomUUID(), name: classFormName.trim(), students }
+    saveClasses([...classes, newClass])
+    setNewClassMode(false)
+    setClassFormName('')
+    setClassFormStudents('')
+  }
+
+  function updateClass(id: string) {
+    if (!classFormName.trim()) return
+    const students = parseStudents(classFormStudents)
+    saveClasses(classes.map(c => c.id === id ? { ...c, name: classFormName.trim(), students } : c))
+    setEditingClassId(null)
+    setClassFormName('')
+    setClassFormStudents('')
+  }
+
+  function startEditClass(cls: KawaClass) {
+    setEditingClassId(cls.id)
+    setClassFormName(cls.name)
+    setClassFormStudents(cls.students.join('\n'))
+    setNewClassMode(false)
+  }
+
+  function deleteClass(id: string) {
+    saveClasses(classes.filter(c => c.id !== id))
+  }
 
   async function handleReplay(gameId: string) {
     setReplayingId(gameId)
@@ -245,6 +294,126 @@ export default function HostPage() {
             {loading ? 'Creating Game...' : '🎮 Create Game & Get PIN'}
           </button>
         </form>
+        {/* My Classes */}
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl text-white font-bold" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              My Classes
+            </h2>
+            {!newClassMode && (
+              <button
+                onClick={() => { setNewClassMode(true); setEditingClassId(null); setClassFormName(''); setClassFormStudents('') }}
+                className="bg-kawaPurple hover:bg-purple-600 text-white font-bold px-4 py-2 rounded-xl transition-all text-sm"
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                + New Class
+              </button>
+            )}
+          </div>
+
+          {/* New class form */}
+          {newClassMode && (
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-5 mb-4 space-y-3">
+              <input
+                type="text"
+                value={classFormName}
+                onChange={e => setClassFormName(e.target.value)}
+                placeholder="Class name (e.g. Period 3)"
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/30 rounded-xl px-4 py-2.5 text-white placeholder:text-white/40 font-semibold focus:outline-none focus:border-kawaYellow transition-colors"
+              />
+              <textarea
+                value={classFormStudents}
+                onChange={e => setClassFormStudents(e.target.value)}
+                placeholder={"Student names, one per line:\nAlice\nBob\nCharlie"}
+                rows={6}
+                className="w-full bg-white/10 border-2 border-white/30 rounded-xl px-4 py-2.5 text-white placeholder:text-white/30 font-mono text-sm focus:outline-none focus:border-kawaYellow transition-colors resize-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={createClass}
+                  className="flex-1 bg-kawaGreen hover:bg-green-400 text-white font-bold py-2.5 rounded-xl transition-all"
+                  style={{ fontFamily: "'Fredoka One', cursive" }}
+                >
+                  Save Class ({parseStudents(classFormStudents).length} students)
+                </button>
+                <button
+                  onClick={() => setNewClassMode(false)}
+                  className="bg-white/10 hover:bg-white/20 text-white/60 font-bold px-4 py-2.5 rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {classes.length === 0 && !newClassMode && (
+            <p className="text-white/30 text-sm text-center py-4">
+              No classes yet. Create one to pre-register students before a game.
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {classes.map(cls => (
+              <div key={cls.id} className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl overflow-hidden">
+                {editingClassId === cls.id ? (
+                  <div className="p-5 space-y-3">
+                    <input
+                      type="text"
+                      value={classFormName}
+                      onChange={e => setClassFormName(e.target.value)}
+                      autoFocus
+                      className="w-full bg-white/10 border-2 border-white/30 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-kawaYellow transition-colors"
+                    />
+                    <textarea
+                      value={classFormStudents}
+                      onChange={e => setClassFormStudents(e.target.value)}
+                      rows={8}
+                      className="w-full bg-white/10 border-2 border-white/30 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-kawaYellow transition-colors resize-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => updateClass(cls.id)}
+                        className="flex-1 bg-kawaGreen hover:bg-green-400 text-white font-bold py-2.5 rounded-xl transition-all"
+                        style={{ fontFamily: "'Fredoka One', cursive" }}
+                      >
+                        Save ({parseStudents(classFormStudents).length} students)
+                      </button>
+                      <button
+                        onClick={() => setEditingClassId(null)}
+                        className="bg-white/10 hover:bg-white/20 text-white/60 font-bold px-4 py-2.5 rounded-xl transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-5 py-4 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-white font-bold text-lg">{cls.name}</p>
+                      <p className="text-white/50 text-sm">{cls.students.length} students</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditClass(cls)}
+                        className="bg-white/10 hover:bg-white/20 text-white/70 font-bold px-3 py-2 rounded-xl transition-all text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteClass(cls.id)}
+                        className="bg-white/10 hover:bg-kawared/30 text-white/40 hover:text-kawared font-bold px-3 py-2 rounded-xl transition-all text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Saved Games */}
         {savedGames.length > 0 && (
           <div className="mt-10">

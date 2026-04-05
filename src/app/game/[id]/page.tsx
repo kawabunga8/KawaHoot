@@ -31,9 +31,22 @@ export default function GameHostPage() {
   const [restarting, setRestarting] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null) // playerId being assigned
+  const [classes, setClasses] = useState<{ id: string; name: string; students: string[] }[]>([])
+  const [showRosterPanel, setShowRosterPanel] = useState(false)
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
+  const [attendance, setAttendance] = useState<Record<string, boolean>>({})
+  const [importingStudents, setImportingStudents] = useState(false)
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
+
+  // Load classes from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('kawahoot_classes')
+      if (stored) setClasses(JSON.parse(stored))
+    } catch {}
+  }, [])
 
   // Initial load
   useEffect(() => {
@@ -150,6 +163,36 @@ export default function GameHostPage() {
     kawaPurple: 'bg-kawaPurple',
     kawaCoral: 'bg-kawaCoral',
   }
+
+  const importStudents = useCallback(async () => {
+    const cls = classes.find(c => c.id === selectedClassId)
+    if (!cls) return
+    const present = cls.students.filter(s => attendance[s] !== false)
+    if (!present.length) return
+    setImportingStudents(true)
+    await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
+    })
+    setImportingStudents(false)
+    setShowRosterPanel(false)
+    setSelectedClassId(null)
+    setAttendance({})
+  }, [id, classes, selectedClassId, attendance])
+
+  const autoAssignTeams = useCallback(async () => {
+    const res = await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'auto_assign' }),
+    })
+    const data = await res.json()
+    if (data.success && data.assignments) {
+      setPlayers(prev => prev.map(p => {
+        const a = data.assignments.find((x: { playerId: string; teamId: string }) => x.playerId === p.id)
+        return a ? { ...p, team_id: a.teamId } : p
+      }))
+    }
+  }, [id])
 
   const setMode = useCallback(async (mode: 'individual' | 'teams') => {
     setGame(prev => prev ? { ...prev, mode } : prev)
@@ -303,6 +346,23 @@ export default function GameHostPage() {
     setLoading(false)
   }, [id])
 
+  const pauseGame = useCallback(async () => {
+    setGame(prev => prev ? { ...prev, status: 'paused' } : prev)
+    await fetch('/api/game/pause', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'pause' }),
+    })
+  }, [id])
+
+  const resumeGame = useCallback(async () => {
+    setGame(prev => prev ? { ...prev, status: 'answer_reveal' } : prev)
+    setAssigningPlayer(null)
+    await fetch('/api/game/pause', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'resume' }),
+    })
+  }, [id])
+
   if (!game) {
     return (
       <div className="min-h-screen bg-kawaDark flex items-center justify-center">
@@ -396,6 +456,80 @@ export default function GameHostPage() {
             </div>
           </div>
 
+          {/* Class Roster panel */}
+          {classes.length > 0 && (
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
+              <button
+                onClick={() => setShowRosterPanel(!showRosterPanel)}
+                className="w-full flex items-center justify-between text-white font-bold"
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                <span>🎓 Use Class Roster</span>
+                <span className="text-white/40 text-sm">{showRosterPanel ? '▲' : '▼'}</span>
+              </button>
+              {showRosterPanel && (
+                <div className="mt-4 space-y-3">
+                  {/* Class selector */}
+                  <div className="flex flex-wrap gap-2">
+                    {classes.map(cls => (
+                      <button
+                        key={cls.id}
+                        onClick={() => {
+                          setSelectedClassId(cls.id)
+                          const att: Record<string, boolean> = {}
+                          cls.students.forEach(s => { att[s] = true })
+                          setAttendance(att)
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${selectedClassId === cls.id ? 'bg-kawaPurple text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}
+                      >
+                        {cls.name} ({cls.students.length})
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Attendance */}
+                  {selectedClassId && (() => {
+                    const cls = classes.find(c => c.id === selectedClassId)!
+                    const presentCount = cls.students.filter(s => attendance[s] !== false).length
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-white/60 text-xs font-bold uppercase tracking-widest">{presentCount} present</p>
+                          <div className="flex gap-3">
+                            <button onClick={() => { const all: Record<string, boolean> = {}; cls.students.forEach(s => { all[s] = true }); setAttendance(all) }} className="text-kawaGreen text-xs font-bold hover:underline">All</button>
+                            <button onClick={() => { const none: Record<string, boolean> = {}; cls.students.forEach(s => { none[s] = false }); setAttendance(none) }} className="text-kawared text-xs font-bold hover:underline">None</button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 max-h-44 overflow-y-auto">
+                          {cls.students.map(student => {
+                            const present = attendance[student] !== false
+                            return (
+                              <button
+                                key={student}
+                                onClick={() => setAttendance(prev => ({ ...prev, [student]: !present }))}
+                                className={`text-xs font-bold px-2 py-1.5 rounded-lg transition-all text-left truncate ${present ? 'bg-kawaGreen/30 border border-kawaGreen/60 text-white' : 'bg-white/5 border border-white/10 text-white/25 line-through'}`}
+                              >
+                                {student}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button
+                          onClick={importStudents}
+                          disabled={importingStudents || presentCount === 0}
+                          className="w-full mt-3 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
+                          style={{ fontFamily: "'Fredoka One', cursive" }}
+                        >
+                          {importingStudents ? 'Importing...' : `Import ${presentCount} Present Student${presentCount !== 1 ? 's' : ''}`}
+                        </button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Individual mode: player chips */}
           {game.mode === 'individual' && players.length > 0 && (
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
@@ -435,6 +569,14 @@ export default function GameHostPage() {
                   <p className="text-kawaYellow text-xs mt-2 animate-pulse">
                     ↓ Click a team to assign <strong>{players.find(p => p.id === assigningPlayer)?.nickname}</strong>
                   </p>
+                )}
+                {teams.length > 0 && players.filter(p => !p.team_id).length > 0 && (
+                  <button
+                    onClick={autoAssignTeams}
+                    className="mt-3 w-full bg-kawaCoral/20 border border-kawaCoral/40 hover:bg-kawaCoral/30 text-kawaCoral font-bold py-2 rounded-xl transition-all text-sm"
+                  >
+                    🎲 Auto-assign all to teams
+                  </button>
                 )}
               </div>
 
@@ -595,6 +737,12 @@ export default function GameHostPage() {
                     style={{ fontFamily: "'Fredoka One', cursive" }}>
                     {loading ? '...' : '🎲 Random'}
                   </button>
+                  <button onClick={pauseGame} disabled={loading}
+                    className="bg-white/10 hover:bg-white/20 border border-white/20 disabled:opacity-50 text-white font-bold text-xl py-4 px-5 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    title="Pause & edit teams"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    ⏸
+                  </button>
                 </>
               ) : (
                 <button onClick={endGame} disabled={loading}
@@ -605,6 +753,144 @@ export default function GameHostPage() {
               )
             )}
           </div>
+        </div>
+      )}
+
+      {/* PAUSED */}
+      {game.status === 'paused' && (
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-kawaYellow/20 border-2 border-kawaYellow rounded-3xl p-5 mb-5 text-center">
+            <p className="text-kawaYellow font-bold text-2xl mb-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              ⏸ Game Paused
+            </p>
+            <p className="text-white/60 text-sm">Reconfigure teams below, then resume when ready.</p>
+          </div>
+
+          {/* Mode toggle */}
+          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
+            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3 text-center">Game Mode</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMode('individual')}
+                className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${game.mode === 'individual' ? 'bg-kawaPurple text-white scale-105' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                👤 Individual
+              </button>
+              <button
+                onClick={() => setMode('teams')}
+                className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${game.mode === 'teams' ? 'bg-kawaCoral text-white scale-105' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                👥 Teams
+              </button>
+            </div>
+          </div>
+
+          {/* Individual mode: player chips */}
+          {game.mode === 'individual' && players.length > 0 && (
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
+              <div className="flex flex-wrap gap-2 justify-center">
+                {players.map(p => (
+                  <span key={p.id} className="bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold px-3 py-1.5 rounded-full">
+                    {p.nickname}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Teams mode: team builder */}
+          {game.mode === 'teams' && (
+            <div className="space-y-4 mb-5">
+              <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+                <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3">
+                  Players ({players.filter(p => !p.team_id).length} unassigned)
+                </p>
+                <div className="flex flex-wrap gap-2 min-h-[36px]">
+                  {players.filter(p => !p.team_id).map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)}
+                      className={`text-white text-sm font-bold px-3 py-1.5 rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white' : 'bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple/60'}`}
+                    >
+                      {p.nickname}
+                    </button>
+                  ))}
+                  {players.filter(p => !p.team_id).length === 0 && (
+                    <p className="text-white/30 text-sm italic">All players assigned</p>
+                  )}
+                </div>
+                {assigningPlayer && (
+                  <p className="text-kawaYellow text-xs mt-2 animate-pulse">
+                    ↓ Click a team to assign <strong>{players.find(p => p.id === assigningPlayer)?.nickname}</strong>
+                  </p>
+                )}
+                {teams.length > 0 && players.filter(p => !p.team_id).length > 0 && (
+                  <button
+                    onClick={autoAssignTeams}
+                    className="mt-3 w-full bg-kawaCoral/20 border border-kawaCoral/40 hover:bg-kawaCoral/30 text-kawaCoral font-bold py-2 rounded-xl transition-all text-sm"
+                  >
+                    🎲 Auto-assign all to teams
+                  </button>
+                )}
+              </div>
+
+              {teams.map(team => {
+                const teamPlayers = players.filter(p => p.team_id === team.id)
+                const colorClass = TEAM_COLORS[team.color] || 'bg-kawaPurple'
+                return (
+                  <div
+                    key={team.id}
+                    onClick={() => assigningPlayer && assignPlayer(assigningPlayer, team.id)}
+                    className={`border-2 rounded-2xl p-4 transition-all ${assigningPlayer ? 'border-kawaYellow cursor-pointer hover:scale-[1.02] hover:bg-white/10' : 'border-white/20'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full ${colorClass}`} />
+                        <p className="text-white font-bold">{team.name}</p>
+                        <span className="text-white/40 text-sm">({teamPlayers.length})</span>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteTeam(team.id) }}
+                        className="text-white/30 hover:text-kawared text-lg transition-colors"
+                      >×</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 min-h-[28px]">
+                      {teamPlayers.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={(e) => { e.stopPropagation(); assignPlayer(p.id, null) }}
+                          className={`${colorClass} text-white text-xs font-bold px-2.5 py-1 rounded-full hover:opacity-70 transition-opacity`}
+                          title="Click to unassign"
+                        >
+                          {p.nickname} ×
+                        </button>
+                      ))}
+                      {teamPlayers.length === 0 && (
+                        <p className="text-white/20 text-xs italic">No players yet</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {teams.length < 6 && (
+                <button
+                  onClick={addTeam}
+                  className="w-full border-2 border-dashed border-white/20 rounded-2xl py-3 text-white/50 hover:text-white hover:border-white/40 transition-all font-bold"
+                >
+                  + Add Team
+                </button>
+              )}
+            </div>
+          )}
+
+          <button onClick={resumeGame}
+            className="w-full bg-kawaGreen hover:bg-green-400 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
+            style={{ fontFamily: "'Fredoka One', cursive" }}>
+            ▶ Resume Game
+          </button>
         </div>
       )}
 
