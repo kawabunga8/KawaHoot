@@ -170,16 +170,14 @@ export default function HostPage() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
-          <a href="/" className="inline-block mb-4">
-            <span
-              className="text-4xl font-bold"
-              style={{ fontFamily: "'Fredoka One', cursive" }}
-            >
-              <span className="text-white">Kawa</span>
-              <span className="text-kawaYellow">hoot</span>
-              <span className="text-kawaCoral">!</span>
-            </span>
-          </a>
+          <span
+            className="text-4xl font-bold inline-block mb-4"
+            style={{ fontFamily: "'Fredoka One', cursive" }}
+          >
+            <span className="text-white">Kawa</span>
+            <span className="text-kawaYellow">hoot</span>
+            <span className="text-kawaCoral">!</span>
+          </span>
           <h1
             className="text-3xl text-white font-bold"
             style={{ fontFamily: "'Fredoka One', cursive" }}

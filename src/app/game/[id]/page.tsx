@@ -380,7 +380,7 @@ export default function GameHostPage() {
       {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion ? (
         <div className="flex items-center gap-4 mb-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/rcs-logo.png" alt="RCS" className="h-16 flex-shrink-0" />
+          <img src="/rcs-logo.png" alt="RCS" className="h-16 flex-shrink-0 pointer-events-none" />
           <div className="flex-1 bg-white rounded-2xl shadow-2xl border-4 border-kawaYellow px-6 py-4 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-white to-yellow-50 pointer-events-none" />
             <div className="relative z-10">
@@ -406,7 +406,7 @@ export default function GameHostPage() {
               {game.title}
             </h1>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3" />
+            <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3 pointer-events-none" />
           </div>
           <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
             <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>
