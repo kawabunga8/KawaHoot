@@ -402,6 +402,22 @@ export default function GameHostPage() {
     })
   }, [id])
 
+  async function openDisplay() {
+    const url = `/game/${id}/display`
+    if ('getScreenDetails' in window) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sd = await (window as any).getScreenDetails()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ext = sd.screens.find((s: any) => !s.isPrimary) || sd.screens[0]
+        window.open(url, '_blank',
+          `left=${ext.availLeft},top=${ext.availTop},width=${ext.availWidth},height=${ext.availHeight}`)
+        return
+      } catch (_e) { /* permission denied or unsupported */ }
+    }
+    window.open(url, '_blank')
+  }
+
   function handleMusicFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1329,7 +1345,7 @@ export default function GameHostPage() {
             📋
           </button>
           <button
-            onClick={() => window.open(`/game/${id}/display`, '_blank')}
+            onClick={openDisplay}
             className="w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 bg-kawaDark/80 backdrop-blur border border-white/20 text-white hover:bg-white/20"
             title="Open display for projector"
           >
