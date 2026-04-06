@@ -32,6 +32,10 @@ export default function GameHostPage() {
   const [restarting, setRestarting] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null) // playerId being assigned
+  const [playerAnswers, setPlayerAnswers] = useState<Record<string, { selected_answer: string; is_correct: boolean; response_time_ms: number }>>({})
+  const [showTeacherPanel, setShowTeacherPanel] = useState(false)
+  const [savedGames, setSavedGames] = useState<{ id: string; title: string; pin: string }[]>([])
+  const [showRestartPicker, setShowRestartPicker] = useState(false)
   const [classes, setClasses] = useState<KawaClass[]>([])
   const [showRosterPanel, setShowRosterPanel] = useState(false)
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
@@ -43,9 +47,9 @@ export default function GameHostPage() {
 
   // Load classes from shared API (group-maker data)
   useEffect(() => {
-    fetch('/api/classes').then(r => r.json()).then(data => {
+    fetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
       if (Array.isArray(data)) setClasses(data)
-    })
+    }).catch(() => {})
   }, [])
 
   // Initial load
@@ -71,6 +75,7 @@ export default function GameHostPage() {
           saved.unshift({ id, title: gameData.title, pin: gameData.pin, createdAt: gameData.created_at })
           localStorage.setItem('kawahoot_games', JSON.stringify(saved.slice(0, 20)))
         }
+        setSavedGames(saved)
       } catch {}
     }
     load()
@@ -132,6 +137,24 @@ export default function GameHostPage() {
       })
       .subscribe()
     return () => { clearInterval(poll); supabase.removeChannel(sub) }
+  }, [currentQuestion?.id, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-player answers for teacher panel
+  useEffect(() => {
+    if (!currentQuestion) { setPlayerAnswers({}); return }
+    function refetch() {
+      supabase.from('answers')
+        .select('player_id, selected_answer, is_correct, response_time_ms')
+        .eq('question_id', currentQuestion!.id)
+        .then(({ data }) => {
+          const map: Record<string, { selected_answer: string; is_correct: boolean; response_time_ms: number }> = {}
+          data?.forEach(a => { map[a.player_id] = { selected_answer: a.selected_answer, is_correct: a.is_correct, response_time_ms: a.response_time_ms } })
+          setPlayerAnswers(map)
+        })
+    }
+    refetch()
+    const poll = setInterval(refetch, 2000)
+    return () => clearInterval(poll)
   }, [currentQuestion?.id, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Countdown timer
@@ -301,19 +324,19 @@ export default function GameHostPage() {
     setLoading(false)
   }, [id, game?.current_question_index])
 
-  const replayGame = useCallback(async () => {
+  const replayGame = useCallback(async (sourceId?: string) => {
     setReplaying(true)
+    const targetId = sourceId || id
     const res = await fetch('/api/game/replay', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: id }),
+      body: JSON.stringify({ gameId: targetId }),
     })
     const data = await res.json()
     if (data.success) {
-      // Persist new game to saved library
       try {
         const saved = JSON.parse(localStorage.getItem('kawahoot_games') || '[]')
         const updated = saved.map((g: { id: string }) =>
-          g.id === id ? { ...g, nextGameId: data.gameId } : g
+          g.id === targetId ? { ...g, nextGameId: data.gameId } : g
         )
         localStorage.setItem('kawahoot_games', JSON.stringify(updated))
       } catch {}
@@ -395,11 +418,11 @@ export default function GameHostPage() {
             </div>
           </div>
           <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-4 py-2 flex-shrink-0">
-            <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">PIN</p>
-            <p className="text-kawaYellow font-bold text-2xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
-              {game.pin}
-            </p>
-          </div>
+              <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">PIN</p>
+              <p className="text-kawaYellow font-bold text-2xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {game.pin}
+              </p>
+            </div>
         </div>
       ) : (
         <div className="flex items-center justify-between mb-6">
@@ -415,6 +438,63 @@ export default function GameHostPage() {
             <p className="text-kawaYellow font-bold text-3xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
               {game.pin}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* TEACHER DATA PANEL */}
+      {showTeacherPanel && players.length > 0 && (
+        <div className="max-w-3xl mx-auto mb-5">
+          <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+              <p className="text-white font-bold text-sm uppercase tracking-widest">📋 Teacher Panel</p>
+              <p className="text-white/40 text-xs">{players.length} players</p>
+            </div>
+            <div className="overflow-auto max-h-64">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Real Name</th>
+                    <th className="text-left px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Game Name</th>
+                    <th className="text-right px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Score</th>
+                    {currentQuestion && (
+                      <>
+                        <th className="text-center px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Answer</th>
+                        <th className="text-right px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Time</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {players.map(p => {
+                    const ans = playerAnswers[p.id]
+                    return (
+                      <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="px-4 py-2 text-white/70">{p.real_name || <span className="text-white/25 italic">guest</span>}</td>
+                        <td className="px-4 py-2 text-white font-bold">{p.nickname}</td>
+                        <td className="px-4 py-2 text-kawaYellow font-bold text-right">{p.score.toLocaleString()}</td>
+                        {currentQuestion && (
+                          <>
+                            <td className="px-4 py-2 text-center">
+                              {ans ? (
+                                <span className={`font-bold px-2 py-0.5 rounded text-xs ${ans.is_correct ? 'bg-kawaGreen/30 text-kawaGreen' : 'bg-kawared/30 text-kawared'}`}>
+                                  {ans.selected_answer} {ans.is_correct ? '✓' : '✗'}
+                                </span>
+                              ) : (
+                                <span className="text-white/20 text-xs italic">–</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-white/50 text-right text-xs">
+                              {ans ? `${(ans.response_time_ms / 1000).toFixed(1)}s` : ''}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1017,32 +1097,83 @@ export default function GameHostPage() {
           )}
 
           {/* Buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 mb-3">
             <button
-              onClick={restartGame}
-              disabled={restarting}
-              className="flex-1 bg-kawaGreen hover:bg-green-400 disabled:opacity-60 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+              onClick={() => setShowRestartPicker(p => !p)}
+              disabled={restarting || replaying}
+              className={`flex-1 font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg disabled:opacity-60 ${showRestartPicker ? 'bg-kawaGreen text-white ring-2 ring-white' : 'bg-kawaGreen hover:bg-green-400 text-white'}`}
               style={{ fontFamily: "'Fredoka One', cursive" }}
             >
-              {restarting ? 'Restarting...' : '↺ Restart'}
-            </button>
-            <button
-              onClick={replayGame}
-              disabled={replaying}
-              className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-60 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
-              style={{ fontFamily: "'Fredoka One', cursive" }}
-            >
-              {replaying ? 'Starting...' : '🔁 Play Again'}
+              {restarting ? 'Restarting...' : '↺ Play Again'}
             </button>
             <a href="/host"
               className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 text-center"
               style={{ fontFamily: "'Fredoka One', cursive" }}>
-              🎮 New Game
+              🎮 New Quiz
             </a>
           </div>
+
+          {/* Game picker panel */}
+          {showRestartPicker && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl overflow-hidden mb-3">
+              <p className="text-white/50 text-xs font-bold uppercase tracking-widest px-4 pt-3 pb-2">Choose a quiz to play</p>
+
+              {/* Current game — restart */}
+              <button
+                onClick={() => { setShowRestartPicker(false); restartGame() }}
+                disabled={restarting}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-colors text-left border-b border-white/10"
+              >
+                <span className="text-xl">↺</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-bold truncate">{game.title}</p>
+                  <p className="text-white/40 text-xs">Restart this quiz (same players, reset scores)</p>
+                </div>
+                <span className="text-kawaGreen text-xs font-bold uppercase tracking-wider">Current</span>
+              </button>
+
+              {/* Other saved games */}
+              {savedGames.filter(g => g.id !== id).map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => { setShowRestartPicker(false); replayGame(g.id) }}
+                  disabled={replaying}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-colors text-left border-b border-white/10 last:border-b-0"
+                >
+                  <span className="text-xl">🎮</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold truncate">{g.title}</p>
+                    <p className="text-white/40 text-xs">PIN {g.pin} · Fresh start, new players join</p>
+                  </div>
+                  <span className="text-kawaYellow text-xs font-bold">{replaying ? '...' : 'Play →'}</span>
+                </button>
+              ))}
+
+              {savedGames.filter(g => g.id !== id).length === 0 && (
+                <p className="px-4 py-3 text-white/30 text-sm italic">No other saved quizzes</p>
+              )}
+            </div>
+          )}
         </div>
         )
       })()}
+      {/* Floating teacher tools — always visible, bottom-left */}
+      <div className="fixed bottom-5 left-5 flex gap-2 z-50">
+        <button
+          onClick={() => setShowTeacherPanel(p => !p)}
+          className={`w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 border ${showTeacherPanel ? 'bg-kawaYellow text-kawaDark border-kawaYellow' : 'bg-kawaDark/80 backdrop-blur border-white/20 text-white hover:bg-white/20'}`}
+          title="Teacher data panel"
+        >
+          📋
+        </button>
+        <button
+          onClick={() => window.open(`/game/${id}/display`, '_blank')}
+          className="w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 bg-kawaDark/80 backdrop-blur border border-white/20 text-white hover:bg-white/20"
+          title="Open display for projector"
+        >
+          📺
+        </button>
+      </div>
     </div>
     </HostGate>
   )

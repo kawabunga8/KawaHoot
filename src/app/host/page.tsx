@@ -37,9 +37,9 @@ export default function HostPage() {
     if (stored) {
       try { setSavedGames(JSON.parse(stored)) } catch {}
     }
-    fetch('/api/classes').then(r => r.json()).then(data => {
+    fetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
       if (Array.isArray(data)) setClasses(data)
-    })
+    }).catch(() => {})
   }, [supabase])
 
   function parseStudents(raw: string) {

@@ -36,6 +36,7 @@ export type Player = {
   id: string
   game_id: string
   nickname: string
+  real_name: string | null
   score: number
   team_id: string | null
   joined_at: string
