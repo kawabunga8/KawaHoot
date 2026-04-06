@@ -169,34 +169,34 @@ export default function DisplayPage() {
       {/* QUESTION / ANSWER REVEAL */}
       {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
         <div className="flex-1 flex flex-col px-8 py-6">
-          {/* Question */}
+          {/* Timer bar + meta row — outside the question box */}
+          <div className="flex items-center gap-4 mb-3">
+            <p className="text-white/40 text-sm font-bold uppercase tracking-widest flex-shrink-0">
+              Q{game.current_question_index + 1} / {questions.length}
+            </p>
+            {game.status === 'question' && (
+              <div className="flex-1 h-4 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
+                  style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }}
+                />
+              </div>
+            )}
+            {game.status === 'question' && (
+              <div className={`font-bold text-4xl flex-shrink-0 ${timeLeft <= 5 ? 'text-kawared' : 'text-kawaYellow'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {timeLeft}s
+              </div>
+            )}
+            <p className="text-white/50 text-sm font-bold flex-shrink-0">{totalAnswers} / {players.length} answered</p>
+          </div>
+
+          {/* Question box — clean, no timer inside */}
           <div className="bg-white rounded-3xl shadow-2xl border-4 border-kawaYellow px-10 py-8 mb-6 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-white to-yellow-50 pointer-events-none" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-kawaDark/40 text-sm font-bold uppercase tracking-widest">
-                  Q{game.current_question_index + 1} / {questions.length}
-                </p>
-                {game.status === 'question' && (
-                  <div className={`font-bold text-4xl ${timeLeft <= 5 ? 'text-kawared' : 'text-kawaDark'}`}
-                    style={{ fontFamily: "'Fredoka One', cursive" }}>
-                    {timeLeft}s
-                  </div>
-                )}
-                <p className="text-kawaDark/60 text-sm font-bold">{totalAnswers} / {players.length} answered</p>
-              </div>
-              {game.status === 'question' && (
-                <div className="h-3 bg-kawaDark/10 rounded-full overflow-hidden mb-4">
-                  <div
-                    className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
-                    style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }}
-                  />
-                </div>
-              )}
-              <p className="text-kawaDark font-bold text-4xl md:text-5xl leading-tight" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {currentQuestion.question_text}
-              </p>
-            </div>
+            <p className="relative z-10 text-kawaDark font-bold text-4xl md:text-5xl leading-tight" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {currentQuestion.question_text}
+            </p>
           </div>
 
           {/* Answer options */}
