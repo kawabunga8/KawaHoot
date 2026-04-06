@@ -39,6 +39,8 @@ export type Player = {
   real_name: string | null
   score: number
   team_id: string | null
+  is_pre_registered: boolean
+  is_claimed: boolean
   joined_at: string
 }
 

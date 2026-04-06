@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true })
   }
 
+  if (action === 'remove_player') {
+    const { playerId } = body
+    await supabase.from('players').delete().eq('id', playerId)
+    return NextResponse.json({ success: true })
+  }
+
   if (action === 'pre_register') {
     const { names } = body as { names: string[] }
     const results: { nickname: string; playerId: string }[] = []

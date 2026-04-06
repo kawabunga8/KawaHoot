@@ -106,6 +106,7 @@ create table if not exists teams (
 alter table players add column if not exists team_id uuid references teams(id) on delete set null;
 alter table players add column if not exists is_pre_registered boolean not null default false;
 alter table players add column if not exists real_name text;
+alter table players add column if not exists is_claimed boolean not null default false;
 
 create index if not exists idx_teams_game_id on teams(game_id);
 create index if not exists idx_players_team_id on players(team_id);

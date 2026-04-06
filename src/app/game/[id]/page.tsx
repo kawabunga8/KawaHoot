@@ -203,6 +203,14 @@ export default function GameHostPage() {
     setAttendance({})
   }, [id, classes, selectedClassId, attendance])
 
+  const markAbsent = useCallback(async (playerId: string) => {
+    setPlayers(prev => prev.filter(p => p.id !== playerId))
+    await fetch('/api/game/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id, action: 'remove_player', playerId }),
+    })
+  }, [id])
+
   const autoAssignTeams = useCallback(async () => {
     const res = await fetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -612,6 +620,55 @@ export default function GameHostPage() {
             </div>
           )}
 
+          {/* Student check-in panel — shown when class is imported */}
+          {(() => {
+            const preReg = players.filter(p => p.is_pre_registered)
+            if (preReg.length === 0) return null
+            const claimed = preReg.filter(p => p.is_claimed)
+            const unclaimed = preReg.filter(p => !p.is_claimed)
+            return (
+              <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-white font-bold text-sm uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    🎓 Student Check-In
+                  </p>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${unclaimed.length === 0 ? 'bg-kawaGreen/30 text-kawaGreen' : 'bg-kawaYellow/30 text-kawaYellow'}`}>
+                    {claimed.length} / {preReg.length} joined
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto">
+                  {preReg.map(p => (
+                    <div key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${p.is_claimed ? 'bg-kawaGreen/20 border border-kawaGreen/40' : 'bg-white/5 border border-white/10'}`}>
+                      <span className={`flex-shrink-0 ${p.is_claimed ? 'text-kawaGreen' : 'text-white/25'}`}>
+                        {p.is_claimed ? '✓' : '○'}
+                      </span>
+                      <span className={`flex-1 font-bold truncate ${p.is_claimed ? 'text-white' : 'text-white/50'}`}>
+                        {p.real_name || p.nickname}
+                        {p.is_claimed && p.nickname !== (p.real_name || p.nickname) && (
+                          <span className="text-white/40 font-normal"> → {p.nickname}</span>
+                        )}
+                      </span>
+                      {!p.is_claimed && (
+                        <button
+                          onClick={() => markAbsent(p.id)}
+                          className="flex-shrink-0 text-white/25 hover:text-kawared text-xs font-bold transition-colors"
+                          title="Mark absent"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {unclaimed.length > 0 && (
+                  <p className="text-white/40 text-xs mt-2 text-center">
+                    Waiting for {unclaimed.length} student{unclaimed.length !== 1 ? 's' : ''} — click ✕ to mark absent
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+
           {/* Individual mode: player chips */}
           {game.mode === 'individual' && players.length > 0 && (
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
@@ -713,11 +770,20 @@ export default function GameHostPage() {
             </div>
           )}
 
-          <button onClick={startGame} disabled={loading || players.length === 0}
-            className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
-            style={{ fontFamily: "'Fredoka One', cursive" }}>
-            {loading ? 'Starting...' : players.length === 0 ? 'Waiting for players...' : `Start Game (${players.length} players) 🚀`}
-          </button>
+          {(() => {
+            const unclaimed = players.filter(p => p.is_pre_registered && !p.is_claimed)
+            const blocked = unclaimed.length > 0
+            return (
+              <button onClick={startGame} disabled={loading || players.length === 0 || blocked}
+                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {loading ? 'Starting...'
+                  : players.length === 0 ? 'Waiting for players...'
+                  : blocked ? `⏳ Waiting for ${unclaimed.length} student${unclaimed.length !== 1 ? 's' : ''} to join...`
+                  : `Start Game (${players.length} players) 🚀`}
+              </button>
+            )
+          })()}
         </div>
       )}
 
