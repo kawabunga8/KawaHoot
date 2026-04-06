@@ -15,16 +15,14 @@ export async function GET(req: NextRequest) {
 
   if (!data) return NextResponse.json({ valid: false })
 
-  let roster: { id: string; nickname: string }[] = []
-  if (data.status === 'waiting') {
-    const { data: players } = await supabase
-      .from('players')
-      .select('id, nickname')
-      .eq('game_id', data.id)
-      .eq('is_pre_registered', true)
-      .order('nickname')
-    roster = players || []
-  }
+  // Return pre-registered roster for any active game status (including late joiners)
+  const { data: players } = await supabase
+    .from('players')
+    .select('id, nickname')
+    .eq('game_id', data.id)
+    .eq('is_pre_registered', true)
+    .order('nickname')
+  const roster = players || []
 
   return NextResponse.json({ valid: true, gameId: data.id, roster })
 }

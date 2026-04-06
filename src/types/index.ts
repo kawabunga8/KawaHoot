@@ -60,6 +60,19 @@ export type LeaderboardEntry = {
   rank: number
 }
 
+export type Student = {
+  id: string
+  class_id: string
+  full_name: string
+}
+
+export type KawaClass = {
+  id: string
+  name: string
+  created_at: string
+  students: Student[]
+}
+
 export type CSVRow = {
   question: string
   option_a: string

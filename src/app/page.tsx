@@ -8,7 +8,7 @@ export default function HomePage() {
   const router = useRouter()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'nickname'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'guest'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
@@ -30,8 +30,9 @@ export default function HomePage() {
       return
     }
     setGameId(data.gameId)
-    setRoster(data.roster || [])
-    setStep('nickname')
+    const r = data.roster || []
+    setRoster(r)
+    setStep(r.length > 0 ? 'roster' : 'guest')
   }
 
   async function handleJoin(e: React.FormEvent) {
@@ -126,7 +127,7 @@ export default function HomePage() {
                 {loading ? 'Checking...' : 'Find Game →'}
               </button>
             </form>
-          ) : roster.length > 0 ? (
+          ) : step === 'roster' ? (
             <div className="space-y-4">
               <button
                 type="button"
@@ -141,7 +142,7 @@ export default function HomePage() {
               >
                 Who are you?
               </h2>
-              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                 {roster.map(r => (
                   <button
                     key={r.id}
@@ -153,35 +154,43 @@ export default function HomePage() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => setRoster([])}
-                className="w-full text-white/40 hover:text-white/70 text-sm text-center transition-colors"
-              >
-                Not on the list? Type a custom name →
-              </button>
+              <div className="pt-1 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setStep('guest')}
+                  className="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white/70 hover:text-white font-bold py-3 rounded-xl transition-all text-sm"
+                  style={{ fontFamily: "'Fredoka One', cursive" }}
+                >
+                  🙋 Join as Guest
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleJoin} className="space-y-5">
               <button
                 type="button"
-                onClick={() => setStep('pin')}
+                onClick={() => setStep(roster.length > 0 ? 'roster' : 'pin')}
                 className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
               >
-                ← PIN: {pin}
+                ← {roster.length > 0 ? 'Back to class list' : `PIN: ${pin}`}
               </button>
               <h2
                 className="text-2xl font-bold text-center text-white"
                 style={{ fontFamily: "'Fredoka One', cursive" }}
               >
-                Choose Your Nickname
+                {roster.length > 0 ? 'Join as Guest' : 'Choose Your Nickname'}
               </h2>
+              {roster.length > 0 && (
+                <p className="text-white/50 text-sm text-center -mt-2">
+                  Not on the class list? Enter any name to join.
+                </p>
+              )}
               <input
                 type="text"
                 maxLength={20}
                 value={nickname}
                 onChange={e => setNickname(e.target.value)}
-                placeholder="e.g. QuizWizard99"
+                placeholder={roster.length > 0 ? 'Your name or nickname' : 'e.g. QuizWizard99'}
                 autoFocus
                 className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
               />

@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Game, Player, QuizQuestion, LeaderboardEntry, Team } from '@/types'
+import HostGate from '@/components/HostGate'
+import type { Game, Player, QuizQuestion, LeaderboardEntry, Team, KawaClass } from '@/types'
 
 const ANSWER_COLORS = {
   A: { bg: 'bg-kawared', text: 'text-white', shape: '▲' },
@@ -31,7 +32,7 @@ export default function GameHostPage() {
   const [restarting, setRestarting] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null) // playerId being assigned
-  const [classes, setClasses] = useState<{ id: string; name: string; students: string[] }[]>([])
+  const [classes, setClasses] = useState<KawaClass[]>([])
   const [showRosterPanel, setShowRosterPanel] = useState(false)
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [attendance, setAttendance] = useState<Record<string, boolean>>({})
@@ -40,12 +41,11 @@ export default function GameHostPage() {
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
 
-  // Load classes from localStorage
+  // Load classes from shared API (group-maker data)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('kawahoot_classes')
-      if (stored) setClasses(JSON.parse(stored))
-    } catch {}
+    fetch('/api/classes').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setClasses(data)
+    })
   }, [])
 
   // Initial load
@@ -167,7 +167,7 @@ export default function GameHostPage() {
   const importStudents = useCallback(async () => {
     const cls = classes.find(c => c.id === selectedClassId)
     if (!cls) return
-    const present = cls.students.filter(s => attendance[s] !== false)
+    const present = cls.students.filter(s => attendance[s.full_name] !== false).map(s => s.full_name)
     if (!present.length) return
     setImportingStudents(true)
     await fetch('/api/game/teams', {
@@ -214,6 +214,7 @@ export default function GameHostPage() {
     })
     const data = await res.json()
     if (data.success) setTeams(prev => [...prev, data.team])
+    else alert(`Failed to add team: ${data.error || 'Unknown error'}`)
   }, [id, teams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteTeam = useCallback(async (teamId: string) => {
@@ -375,6 +376,7 @@ export default function GameHostPage() {
   const totalAnswers = answerCounts.A + answerCounts.B + answerCounts.C + answerCounts.D
 
   return (
+    <HostGate>
     <div className="min-h-screen bg-kawaDark p-4 md:p-6">
       {/* Header — compact during question phase to make room for the question banner */}
       {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion ? (
@@ -477,7 +479,7 @@ export default function GameHostPage() {
                         onClick={() => {
                           setSelectedClassId(cls.id)
                           const att: Record<string, boolean> = {}
-                          cls.students.forEach(s => { att[s] = true })
+                          cls.students.forEach(s => { att[s.full_name] = true })
                           setAttendance(att)
                         }}
                         className={`px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${selectedClassId === cls.id ? 'bg-kawaPurple text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}
@@ -490,26 +492,26 @@ export default function GameHostPage() {
                   {/* Attendance */}
                   {selectedClassId && (() => {
                     const cls = classes.find(c => c.id === selectedClassId)!
-                    const presentCount = cls.students.filter(s => attendance[s] !== false).length
+                    const presentCount = cls.students.filter(s => attendance[s.full_name] !== false).length
                     return (
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-white/60 text-xs font-bold uppercase tracking-widest">{presentCount} present</p>
                           <div className="flex gap-3">
-                            <button onClick={() => { const all: Record<string, boolean> = {}; cls.students.forEach(s => { all[s] = true }); setAttendance(all) }} className="text-kawaGreen text-xs font-bold hover:underline">All</button>
-                            <button onClick={() => { const none: Record<string, boolean> = {}; cls.students.forEach(s => { none[s] = false }); setAttendance(none) }} className="text-kawared text-xs font-bold hover:underline">None</button>
+                            <button onClick={() => { const all: Record<string, boolean> = {}; cls.students.forEach(s => { all[s.full_name] = true }); setAttendance(all) }} className="text-kawaGreen text-xs font-bold hover:underline">All</button>
+                            <button onClick={() => { const none: Record<string, boolean> = {}; cls.students.forEach(s => { none[s.full_name] = false }); setAttendance(none) }} className="text-kawared text-xs font-bold hover:underline">None</button>
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-1.5 max-h-44 overflow-y-auto">
                           {cls.students.map(student => {
-                            const present = attendance[student] !== false
+                            const present = attendance[student.full_name] !== false
                             return (
                               <button
-                                key={student}
-                                onClick={() => setAttendance(prev => ({ ...prev, [student]: !present }))}
+                                key={student.id || student.full_name}
+                                onClick={() => setAttendance(prev => ({ ...prev, [student.full_name]: !present }))}
                                 className={`text-xs font-bold px-2 py-1.5 rounded-lg transition-all text-left truncate ${present ? 'bg-kawaGreen/30 border border-kawaGreen/60 text-white' : 'bg-white/5 border border-white/10 text-white/25 line-through'}`}
                               >
-                                {student}
+                                {student.full_name}
                               </button>
                             )
                           })}
@@ -743,13 +745,27 @@ export default function GameHostPage() {
                     style={{ fontFamily: "'Fredoka One', cursive" }}>
                     ⏸
                   </button>
+                  <button onClick={restartGame} disabled={restarting}
+                    className="bg-kawaGreen hover:bg-green-400 border border-white/20 disabled:opacity-50 text-white font-bold text-xl py-4 px-5 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    title="Restart from question 1"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {restarting ? '...' : '↺'}
+                  </button>
                 </>
               ) : (
-                <button onClick={endGame} disabled={loading}
-                  className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
-                  style={{ fontFamily: "'Fredoka One', cursive" }}>
-                  {loading ? '...' : '🏆 End Game & Final Scores'}
-                </button>
+                <>
+                  <button onClick={endGame} disabled={loading}
+                    className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {loading ? '...' : '🏆 End Game & Final Scores'}
+                  </button>
+                  <button onClick={restartGame} disabled={restarting}
+                    className="bg-kawaGreen hover:bg-green-400 border border-white/20 disabled:opacity-50 text-white font-bold text-xl py-4 px-5 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                    title="Restart from question 1"
+                    style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {restarting ? '...' : '↺'}
+                  </button>
+                </>
               )
             )}
           </div>
@@ -1028,5 +1044,6 @@ export default function GameHostPage() {
         )
       })()}
     </div>
+    </HostGate>
   )
 }

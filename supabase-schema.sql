@@ -84,6 +84,11 @@ alter table players replica identity full;
 alter table answers replica identity full;
 alter table quiz_questions replica identity full;
 
+-- Classes + Students tables (shared with Group Maker app)
+-- These already exist in the shared Supabase project; documented here for reference.
+-- classes: id, name, created_at
+-- students: id, class_id (FK classes), full_name, created_at
+
 -- Migration: add next_game_id to existing databases
 alter table games add column if not exists next_game_id uuid;
 

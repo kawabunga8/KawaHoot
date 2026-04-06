@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
-import type { CSVRow } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import HostGate from '@/components/HostGate'
+import type { CSVRow, KawaClass } from '@/types'
 
 type SavedGame = { id: string; title: string; pin: string; createdAt: string }
-type KawaClass = { id: string; name: string; students: string[] }
 
 const SAMPLE_CSV = `question,option_a,option_b,option_c,option_d,correct_answer,time_limit
 What is 2 + 2?,3,4,5,6,B,20
@@ -15,6 +16,7 @@ Who wrote Romeo and Juliet?,Dickens,Shakespeare,Tolstoy,Austen,B,20`
 
 export default function HostPage() {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const fileRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState<CSVRow[]>([])
@@ -35,35 +37,38 @@ export default function HostPage() {
     if (stored) {
       try { setSavedGames(JSON.parse(stored)) } catch {}
     }
-    const storedClasses = localStorage.getItem('kawahoot_classes')
-    if (storedClasses) {
-      try { setClasses(JSON.parse(storedClasses)) } catch {}
-    }
-  }, [])
-
-  function saveClasses(updated: KawaClass[]) {
-    setClasses(updated)
-    localStorage.setItem('kawahoot_classes', JSON.stringify(updated))
-  }
+    fetch('/api/classes').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setClasses(data)
+    })
+  }, [supabase])
 
   function parseStudents(raw: string) {
     return raw.split('\n').map(s => s.trim()).filter(Boolean)
   }
 
-  function createClass() {
+  async function createClass() {
     if (!classFormName.trim()) return
-    const students = parseStudents(classFormStudents)
-    const newClass: KawaClass = { id: crypto.randomUUID(), name: classFormName.trim(), students }
-    saveClasses([...classes, newClass])
+    const names = parseStudents(classFormStudents)
+    const { data: cls } = await supabase.from('classes').insert({ name: classFormName.trim() }).select('id, name, created_at').single()
+    if (!cls) return
+    if (names.length > 0) {
+      await supabase.from('students').insert(names.map(n => ({ class_id: cls.id, full_name: n })))
+    }
+    setClasses(prev => [...prev, { ...cls, students: names.map(n => ({ id: '', class_id: cls.id, full_name: n })) }])
     setNewClassMode(false)
     setClassFormName('')
     setClassFormStudents('')
   }
 
-  function updateClass(id: string) {
+  async function updateClass(id: string) {
     if (!classFormName.trim()) return
-    const students = parseStudents(classFormStudents)
-    saveClasses(classes.map(c => c.id === id ? { ...c, name: classFormName.trim(), students } : c))
+    const names = parseStudents(classFormStudents)
+    setClasses(prev => prev.map(c => c.id === id ? { ...c, name: classFormName.trim(), students: names.map(n => ({ id: '', class_id: id, full_name: n })) } : c))
+    await supabase.from('classes').update({ name: classFormName.trim() }).eq('id', id)
+    await supabase.from('students').delete().eq('class_id', id)
+    if (names.length > 0) {
+      await supabase.from('students').insert(names.map(n => ({ class_id: id, full_name: n })))
+    }
     setEditingClassId(null)
     setClassFormName('')
     setClassFormStudents('')
@@ -72,12 +77,14 @@ export default function HostPage() {
   function startEditClass(cls: KawaClass) {
     setEditingClassId(cls.id)
     setClassFormName(cls.name)
-    setClassFormStudents(cls.students.join('\n'))
+    setClassFormStudents(cls.students.map(s => s.full_name).join('\n'))
     setNewClassMode(false)
   }
 
-  function deleteClass(id: string) {
-    saveClasses(classes.filter(c => c.id !== id))
+  async function deleteClass(id: string) {
+    setClasses(prev => prev.filter(c => c.id !== id))
+    await supabase.from('students').delete().eq('class_id', id)
+    await supabase.from('classes').delete().eq('id', id)
   }
 
   async function handleReplay(gameId: string) {
@@ -89,7 +96,18 @@ export default function HostPage() {
     })
     const data = await res.json()
     setReplayingId(null)
-    if (!data.success) { alert(data.error || 'Failed to replay game'); return }
+    if (!data.success) {
+      if (res.status === 404) {
+        // Game no longer exists in DB — remove stale entry from saved list
+        const cleaned = savedGames.filter(g => g.id !== gameId)
+        setSavedGames(cleaned)
+        localStorage.setItem('kawahoot_games', JSON.stringify(cleaned))
+        setError('That saved game no longer exists. It may have been deleted.')
+      } else {
+        setError(data.error || 'Failed to replay game')
+      }
+      return
+    }
     // Update saved games with new entry
     const updated: SavedGame[] = JSON.parse(localStorage.getItem('kawahoot_games') || '[]')
     const orig = updated.find(g => g.id === gameId)
@@ -166,6 +184,7 @@ export default function HostPage() {
   }
 
   return (
+    <HostGate>
     <div className="min-h-screen bg-kawaDark px-4 py-10">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
@@ -428,14 +447,23 @@ export default function HostPage() {
                     <p className="text-white font-bold text-lg">{g.title}</p>
                     <p className="text-white/50 text-sm">PIN: {g.pin} · {new Date(g.createdAt).toLocaleDateString()}</p>
                   </div>
-                  <button
-                    onClick={() => handleReplay(g.id)}
-                    disabled={replayingId === g.id}
-                    className="bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold px-5 py-2 rounded-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-                    style={{ fontFamily: "'Fredoka One', cursive" }}
-                  >
-                    {replayingId === g.id ? 'Loading...' : '🔁 Replay'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => router.push(`/game/${g.id}`)}
+                      className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold px-4 py-2 rounded-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                      style={{ fontFamily: "'Fredoka One', cursive" }}
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => handleReplay(g.id)}
+                      disabled={replayingId === g.id}
+                      className="bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                      style={{ fontFamily: "'Fredoka One', cursive" }}
+                    >
+                      {replayingId === g.id ? 'Loading...' : '🔁 Replay'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -443,5 +471,6 @@ export default function HostPage() {
         )}
       </div>
     </div>
+    </HostGate>
   )
 }
