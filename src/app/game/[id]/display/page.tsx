@@ -124,7 +124,6 @@ export default function DisplayPage() {
   }
 
   const totalAnswers = answerCounts.A + answerCounts.B + answerCounts.C + answerCounts.D
-  const maxCount = Math.max(answerCounts.A, answerCounts.B, answerCounts.C, answerCounts.D, 1)
 
   return (
     <div className="min-h-screen bg-kawaDark flex flex-col overflow-hidden">
@@ -203,36 +202,21 @@ export default function DisplayPage() {
           <div className="grid grid-cols-2 gap-4 flex-1">
             {(['A', 'B', 'C', 'D'] as const).map(opt => {
               const color = ANSWER_COLORS[opt]
-              const count = answerCounts[opt]
-              const pct = (count / maxCount) * 100
               const isCorrect = currentQuestion.correct_answer === opt
               const revealed = game.status === 'answer_reveal'
               return (
                 <div
                   key={opt}
-                  className={`${color.bg} ${color.text} rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between
+                  className={`${color.bg} ${color.text} rounded-2xl p-6 flex items-center gap-3
                     ${revealed && isCorrect ? 'ring-8 ring-white scale-105' : ''}
                     ${revealed && !isCorrect ? 'opacity-40' : ''}`}
                   style={{ transition: 'all 0.3s' }}
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-3xl">{color.shape}</span>
-                    <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
-                    </span>
-                    {revealed && isCorrect && <span className="text-4xl">✓</span>}
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-xl opacity-80">{count} vote{count !== 1 ? 's' : ''}</span>
-                      {totalAnswers > 0 && (
-                        <span className="font-bold text-xl opacity-80">{Math.round((count / totalAnswers) * 100)}%</span>
-                      )}
-                    </div>
-                    <div className="h-3 bg-black/20 rounded-full overflow-hidden">
-                      <div className="h-full bg-white/50 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
+                  <span className="text-3xl flex-shrink-0">{color.shape}</span>
+                  <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
+                  </span>
+                  {revealed && isCorrect && <span className="text-4xl flex-shrink-0">✓</span>}
                 </div>
               )
             })}
