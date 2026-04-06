@@ -36,6 +36,13 @@ export default function GameHostPage() {
   const [showTeacherPanel, setShowTeacherPanel] = useState(false)
   const [savedGames, setSavedGames] = useState<{ id: string; title: string; pin: string }[]>([])
   const [showRestartPicker, setShowRestartPicker] = useState(false)
+  const [showMusicPanel, setShowMusicPanel] = useState(false)
+  const [musicTrackName, setMusicTrackName] = useState('')
+  const [musicPlaying, setMusicPlaying] = useState(false)
+  const [musicVolume, setMusicVolume] = useState(0.5)
+  const [musicLoop, setMusicLoop] = useState(true)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const musicFileRef = useRef<HTMLInputElement | null>(null)
   const [classes, setClasses] = useState<KawaClass[]>([])
   const [showRosterPanel, setShowRosterPanel] = useState(false)
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
@@ -394,6 +401,47 @@ export default function GameHostPage() {
       body: JSON.stringify({ gameId: id, action: 'resume' }),
     })
   }, [id])
+
+  function handleMusicFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = url
+      audioRef.current.loop = musicLoop
+      audioRef.current.volume = musicVolume
+      audioRef.current.play()
+      setMusicPlaying(true)
+    } else {
+      const audio = new Audio(url)
+      audio.loop = musicLoop
+      audio.volume = musicVolume
+      audio.play()
+      audioRef.current = audio
+      audio.addEventListener('ended', () => { if (!audio.loop) setMusicPlaying(false) })
+      setMusicPlaying(true)
+    }
+    setMusicTrackName(file.name.replace(/\.[^.]+$/, ''))
+  }
+
+  function togglePlayPause() {
+    const audio = audioRef.current
+    if (!audio) return
+    if (audio.paused) { audio.play(); setMusicPlaying(true) }
+    else { audio.pause(); setMusicPlaying(false) }
+  }
+
+  function handleVolumeChange(v: number) {
+    setMusicVolume(v)
+    if (audioRef.current) audioRef.current.volume = v
+  }
+
+  function toggleLoop() {
+    const next = !musicLoop
+    setMusicLoop(next)
+    if (audioRef.current) audioRef.current.loop = next
+  }
 
   if (!game) {
     return (
@@ -1224,21 +1272,77 @@ export default function GameHostPage() {
         )
       })()}
       {/* Floating teacher tools — always visible, bottom-left */}
-      <div className="fixed bottom-5 left-5 flex gap-2 z-50">
-        <button
-          onClick={() => setShowTeacherPanel(p => !p)}
-          className={`w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 border ${showTeacherPanel ? 'bg-kawaYellow text-kawaDark border-kawaYellow' : 'bg-kawaDark/80 backdrop-blur border-white/20 text-white hover:bg-white/20'}`}
-          title="Teacher data panel"
-        >
-          📋
-        </button>
-        <button
-          onClick={() => window.open(`/game/${id}/display`, '_blank')}
-          className="w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 bg-kawaDark/80 backdrop-blur border border-white/20 text-white hover:bg-white/20"
-          title="Open display for projector"
-        >
-          📺
-        </button>
+      <div className="fixed bottom-5 left-5 z-50">
+        {/* Music panel */}
+        {showMusicPanel && (
+          <div className="mb-3 bg-kawaDark/95 backdrop-blur border border-white/20 rounded-2xl p-4 shadow-2xl w-72">
+            <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-3">🎵 Music Player</p>
+
+            {/* File picker */}
+            <input ref={musicFileRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicFile} />
+            <button
+              onClick={() => musicFileRef.current?.click()}
+              className="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-bold py-2 px-3 rounded-xl mb-3 transition-all truncate text-left"
+            >
+              {musicTrackName || '📂 Choose music file...'}
+            </button>
+
+            {/* Controls */}
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={togglePlayPause}
+                disabled={!musicTrackName}
+                className="w-10 h-10 rounded-xl bg-kawaYellow hover:bg-yellow-400 disabled:opacity-30 text-kawaDark font-bold text-lg transition-all flex items-center justify-center"
+              >
+                {musicPlaying ? '⏸' : '▶'}
+              </button>
+              <button
+                onClick={toggleLoop}
+                className={`w-10 h-10 rounded-xl font-bold text-sm transition-all border ${musicLoop ? 'bg-kawaPurple border-kawaPurple text-white' : 'bg-white/10 border-white/20 text-white/50'}`}
+                title="Loop"
+              >
+                🔁
+              </button>
+              <div className="flex-1 flex items-center gap-2">
+                <span className="text-white/30 text-xs">🔈</span>
+                <input
+                  type="range" min={0} max={1} step={0.05} value={musicVolume}
+                  onChange={e => handleVolumeChange(Number(e.target.value))}
+                  className="flex-1 accent-kawaYellow"
+                />
+                <span className="text-white/30 text-xs">🔊</span>
+              </div>
+            </div>
+
+            {musicTrackName && (
+              <p className="text-white/40 text-xs truncate">{musicPlaying ? '▶ Playing:' : '⏸ Paused:'} {musicTrackName}</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowTeacherPanel(p => !p)}
+            className={`w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 border ${showTeacherPanel ? 'bg-kawaYellow text-kawaDark border-kawaYellow' : 'bg-kawaDark/80 backdrop-blur border-white/20 text-white hover:bg-white/20'}`}
+            title="Teacher data panel"
+          >
+            📋
+          </button>
+          <button
+            onClick={() => window.open(`/game/${id}/display`, '_blank')}
+            className="w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 bg-kawaDark/80 backdrop-blur border border-white/20 text-white hover:bg-white/20"
+            title="Open display for projector"
+          >
+            📺
+          </button>
+          <button
+            onClick={() => setShowMusicPanel(p => !p)}
+            className={`w-12 h-12 rounded-2xl font-bold text-xl shadow-lg transition-all hover:scale-110 active:scale-95 border ${showMusicPanel ? 'bg-kawaPurple border-kawaPurple text-white' : 'bg-kawaDark/80 backdrop-blur border-white/20 text-white hover:bg-white/20'} ${musicPlaying ? 'animate-pulse' : ''}`}
+            title="Music player"
+          >
+            🎵
+          </button>
+        </div>
       </div>
     </div>
     </HostGate>
