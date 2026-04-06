@@ -463,6 +463,17 @@ export default function HostPage() {
                     >
                       {replayingId === g.id ? 'Loading...' : '🔁 Replay'}
                     </button>
+                    <button
+                      onClick={() => {
+                        const updated = savedGames.filter(s => s.id !== g.id)
+                        setSavedGames(updated)
+                        localStorage.setItem('kawahoot_games', JSON.stringify(updated))
+                      }}
+                      className="text-white/30 hover:text-kawared text-xl px-2 transition-colors"
+                      title="Remove from saved list"
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
               ))}
