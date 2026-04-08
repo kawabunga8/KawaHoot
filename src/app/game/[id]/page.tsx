@@ -48,6 +48,7 @@ export default function GameHostPage() {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [attendance, setAttendance] = useState<Record<string, boolean>>({})
   const [importingStudents, setImportingStudents] = useState(false)
+  const [importedCount, setImportedCount] = useState(0)
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
@@ -227,10 +228,12 @@ export default function GameHostPage() {
     const present = cls.students.filter(s => attendance[s.full_name] !== false).map(s => s.full_name)
     if (!present.length) return
     setImportingStudents(true)
-    await fetch('/api/game/teams', {
+    const res = await fetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
     })
+    const data = await res.json()
+    setImportedCount(data.players?.length ?? present.length)
     setImportingStudents(false)
   }, [id, classes, selectedClassId, attendance])
 
@@ -702,11 +705,10 @@ export default function GameHostPage() {
                           })}
                         </div>
                         {(() => {
-                          const preReg = players.filter(p => p.is_pre_registered)
-                          const claimed = preReg.filter(p => p.is_claimed).length
-                          const total = preReg.length
-                          if (total > 0) {
-                            const ratio = total > 0 ? claimed / total : 0
+                          if (importedCount > 0) {
+                            const unclaimed = players.filter(p => p.is_pre_registered && !p.is_claimed).length
+                            const joined = importedCount - unclaimed
+                            const ratio = joined / importedCount
                             const bg = ratio === 1 ? 'bg-kawaGreen' : ratio >= 0.5 ? 'bg-kawaYellow' : 'bg-kawaCoral'
                             const fg = ratio >= 0.5 ? 'text-kawaDark' : 'text-white'
                             return (
@@ -716,7 +718,7 @@ export default function GameHostPage() {
                                 className={`w-full mt-3 ${bg} disabled:opacity-70 ${fg} font-bold py-3 rounded-xl transition-all`}
                                 style={{ fontFamily: "'Fredoka One', cursive" }}
                               >
-                                {importingStudents ? 'Importing...' : `Imported ✓ — ${claimed}/${total} joined`}
+                                {importingStudents ? 'Importing...' : `Imported ✓ — ${joined}/${importedCount} joined`}
                               </button>
                             )
                           }
