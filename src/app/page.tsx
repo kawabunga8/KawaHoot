@@ -8,13 +8,11 @@ export default function HomePage() {
   const router = useRouter()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'roster' | 'chosen' | 'guest'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'guest'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
-  const [gameMode, setGameMode] = useState<'individual' | 'teams'>('individual')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
-  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; realName: string } | null>(null)
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -32,25 +30,9 @@ export default function HomePage() {
       return
     }
     setGameId(data.gameId)
-    setGameMode(data.mode || 'individual')
     const r = data.roster || []
     setRoster(r)
     setStep(r.length > 0 ? 'roster' : 'guest')
-  }
-
-  async function handleClaimPlayer(e: React.FormEvent) {
-    e.preventDefault()
-    if (!selectedPlayer) return
-    setError('')
-    const chosenName = nickname.trim() || selectedPlayer.realName
-    setLoading(true)
-    await fetch('/api/game/claim-player', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: selectedPlayer.id, nickname: chosenName, realName: selectedPlayer.realName }),
-    })
-    setLoading(false)
-    router.push(`/play/${gameId}?playerId=${selectedPlayer.id}`)
   }
 
   async function handleJoin(e: React.FormEvent) {
@@ -143,49 +125,6 @@ export default function HomePage() {
                 style={{ fontFamily: "'Fredoka One', cursive" }}
               >
                 {loading ? 'Checking...' : 'Find Game →'}
-              </button>
-            </form>
-          ) : step === 'chosen' && selectedPlayer ? (
-            <form onSubmit={handleClaimPlayer} className="space-y-5">
-              <button
-                type="button"
-                onClick={() => setStep('roster')}
-                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
-              >
-                ← Back
-              </button>
-              <div className="text-center">
-                <p className="text-white/50 text-sm mb-1">Playing as</p>
-                <p className="text-kawaYellow font-bold text-lg" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                  {selectedPlayer.realName}
-                </p>
-              </div>
-              <div>
-                <h2
-                  className="text-2xl font-bold text-center text-white mb-1"
-                  style={{ fontFamily: "'Fredoka One', cursive" }}
-                >
-                  Choose a Game Name
-                </h2>
-                <p className="text-white/40 text-sm text-center">Leave blank to use your real name</p>
-              </div>
-              <input
-                type="text"
-                maxLength={20}
-                value={nickname}
-                onChange={e => setNickname(e.target.value)}
-                placeholder={selectedPlayer.realName}
-                autoFocus
-                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/25 focus:outline-none focus:border-kawaYellow transition-colors"
-              />
-              {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
-                style={{ fontFamily: "'Fredoka One', cursive" }}
-              >
-                {loading ? 'Joining...' : "Let's Go! 🚀"}
               </button>
             </form>
           ) : step === 'roster' ? (
