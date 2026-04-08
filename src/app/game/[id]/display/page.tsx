@@ -188,43 +188,10 @@ export default function DisplayPage() {
         </div>
       )}
 
-      {/* QUESTION / ANSWER REVEAL / SCORES */}
-      {(game.status === 'question' || game.status === 'answer_reveal' || game.status === 'scores') && currentQuestion && (
-        <div className="flex-1 flex flex-col px-8 py-6">
-          {/* Timer bar + meta row */}
-          <div className="flex items-center gap-4 mb-3">
-            <p className="text-white/40 text-sm font-bold uppercase tracking-widest flex-shrink-0">
-              Q{game.current_question_index + 1} / {questions.length}
-            </p>
-            {game.status === 'question' && (
-              <div className="flex-1 h-4 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
-                  style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }}
-                />
-              </div>
-            )}
-            {game.status === 'question' && (
-              <div className={`font-bold text-4xl flex-shrink-0 ${timeLeft <= 5 ? 'text-kawared' : 'text-kawaYellow'}`}
-                style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {timeLeft}s
-              </div>
-            )}
-            <p className="text-white/50 text-sm font-bold flex-shrink-0">{totalAnswers} / {players.length} answered</p>
-          </div>
-
-          {/* Question box */}
-          <div className="bg-white rounded-3xl shadow-2xl border-4 border-kawaYellow px-10 py-8 mb-6 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-white to-yellow-50 pointer-events-none" />
-            <p className="relative z-10 text-kawaDark font-bold text-4xl md:text-5xl leading-tight" style={{ fontFamily: "'Fredoka One', cursive" }}>
-              {currentQuestion.question_text}
-            </p>
-          </div>
-
-          {game.status === 'scores' ? (
-            /* SCORES: full-screen leaderboard, no answers */
-            <div className="flex-1 flex items-center justify-center">
-              <div className="w-full max-w-lg bg-white/10 border border-white/20 rounded-3xl p-8">
+      {/* SCORES: full-screen leaderboard, question hidden */}
+      {game.status === 'scores' && currentQuestion && (
+        <div className="flex-1 flex items-center justify-center px-8 py-6">
+          <div className="w-full max-w-lg bg-white/10 border border-white/20 rounded-3xl p-8">
                 {game.mode === 'teams' && teamScores.length > 0 ? (
                   <>
                     <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
@@ -258,33 +225,65 @@ export default function DisplayPage() {
                     </div>
                   </>
                 )}
+          </div>
+        </div>
+      )}
+
+      {/* QUESTION / ANSWER REVEAL: question + answer grid */}
+      {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
+        <div className="flex-1 flex flex-col px-8 py-6">
+          {/* Timer bar + meta row */}
+          <div className="flex items-center gap-4 mb-3">
+            <p className="text-white/40 text-sm font-bold uppercase tracking-widest flex-shrink-0">
+              Q{game.current_question_index + 1} / {questions.length}
+            </p>
+            {game.status === 'question' && (
+              <div className="flex-1 h-4 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-kawaYellow to-kawaCoral rounded-full transition-all duration-200"
+                  style={{ width: `${(timeLeft / currentQuestion.time_limit) * 100}%` }}
+                />
               </div>
-            </div>
-          ) : (
-            /* QUESTION / ANSWER REVEAL: full-size answer grid */
-            <div className="grid grid-cols-2 gap-4 flex-1">
-              {(['A', 'B', 'C', 'D'] as const).map(opt => {
-                const color = ANSWER_COLORS[opt]
-                const isCorrect = currentQuestion.correct_answer === opt
-                const revealed = game.status === 'answer_reveal'
-                return (
-                  <div
-                    key={opt}
-                    className={`${color.bg} ${color.text} rounded-2xl p-6 flex items-center gap-3
-                      ${revealed && isCorrect ? 'ring-8 ring-white scale-105' : ''}
-                      ${revealed && !isCorrect ? 'opacity-40' : ''}`}
-                    style={{ transition: 'all 0.3s' }}
-                  >
-                    <span className="text-3xl flex-shrink-0">{color.shape}</span>
-                    <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
-                    </span>
-                    {revealed && isCorrect && <span className="text-4xl flex-shrink-0">✓</span>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+            )}
+            {game.status === 'question' && (
+              <div className={`font-bold text-4xl flex-shrink-0 ${timeLeft <= 5 ? 'text-kawared' : 'text-kawaYellow'}`}
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {timeLeft}s
+              </div>
+            )}
+            <p className="text-white/50 text-sm font-bold flex-shrink-0">{totalAnswers} / {players.length} answered</p>
+          </div>
+
+          {/* Question box */}
+          <div className="bg-white rounded-3xl shadow-2xl border-4 border-kawaYellow px-10 py-8 mb-6 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-white to-yellow-50 pointer-events-none" />
+            <p className="relative z-10 text-kawaDark font-bold text-4xl md:text-5xl leading-tight" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              {currentQuestion.question_text}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 flex-1">
+            {(['A', 'B', 'C', 'D'] as const).map(opt => {
+              const color = ANSWER_COLORS[opt]
+              const isCorrect = currentQuestion.correct_answer === opt
+              const revealed = game.status === 'answer_reveal'
+              return (
+                <div
+                  key={opt}
+                  className={`${color.bg} ${color.text} rounded-2xl p-6 flex items-center gap-3
+                    ${revealed && isCorrect ? 'ring-8 ring-white scale-105' : ''}
+                    ${revealed && !isCorrect ? 'opacity-40' : ''}`}
+                  style={{ transition: 'all 0.3s' }}
+                >
+                  <span className="text-3xl flex-shrink-0">{color.shape}</span>
+                  <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
+                  </span>
+                  {revealed && isCorrect && <span className="text-4xl flex-shrink-0">✓</span>}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
