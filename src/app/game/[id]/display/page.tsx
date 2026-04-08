@@ -12,6 +12,15 @@ const ANSWER_COLORS = {
   D: { bg: 'bg-kawaGreen', text: 'text-white', shape: '■' },
 }
 
+const TEAM_COLOR_HEX: Record<string, string> = {
+  kawared: '#EF4444',
+  kawaBlue: '#3B82F6',
+  kawaYellow: '#F59E0B',
+  kawaCoral: '#F97316',
+  kawaGreen: '#22C55E',
+  kawaPurple: '#7C3AED',
+}
+
 export default function DisplayPage() {
   const { id } = useParams<{ id: string }>()
   const supabase = useMemo(() => createClient(), [])
@@ -259,7 +268,7 @@ export default function DisplayPage() {
                 {teamScores[1] && (
                   <div className="flex-1 text-center">
                     <div className="text-4xl mb-2">🥈</div>
-                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/30" style={{ height: 140, backgroundColor: teamScores[1].color + '40', borderColor: teamScores[1].color }}>
+                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/30" style={{ height: 140, backgroundColor: (TEAM_COLOR_HEX[teamScores[1].color] ?? teamScores[1].color) + '40', borderColor: TEAM_COLOR_HEX[teamScores[1].color] ?? teamScores[1].color }}>
                       <p className="text-white font-bold text-xl truncate">{teamScores[1].name}</p>
                       <p className="text-kawaYellow font-bold text-2xl mt-2">{teamScores[1].score.toLocaleString()}</p>
                       <p className="text-white/40 text-sm">pts</p>
@@ -268,7 +277,7 @@ export default function DisplayPage() {
                 )}
                 <div className="flex-1 text-center">
                   <div className="text-5xl mb-2">🥇</div>
-                  <div className="rounded-t-2xl px-4 py-4 border-4" style={{ height: 180, backgroundColor: teamScores[0].color + '50', borderColor: teamScores[0].color }}>
+                  <div className="rounded-t-2xl px-4 py-4 border-4" style={{ height: 180, backgroundColor: (TEAM_COLOR_HEX[teamScores[0].color] ?? teamScores[0].color) + '50', borderColor: TEAM_COLOR_HEX[teamScores[0].color] ?? teamScores[0].color }}>
                     <p className="text-white font-bold text-2xl truncate">{teamScores[0].name}</p>
                     <p className="text-kawaYellow font-bold text-3xl mt-2">{teamScores[0].score.toLocaleString()}</p>
                     <p className="text-white/40 text-sm">pts</p>
@@ -277,7 +286,7 @@ export default function DisplayPage() {
                 {teamScores[2] && (
                   <div className="flex-1 text-center">
                     <div className="text-4xl mb-2">🥉</div>
-                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/20" style={{ height: 110, backgroundColor: teamScores[2].color + '30', borderColor: teamScores[2].color }}>
+                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/20" style={{ height: 110, backgroundColor: (TEAM_COLOR_HEX[teamScores[2].color] ?? teamScores[2].color) + '30', borderColor: TEAM_COLOR_HEX[teamScores[2].color] ?? teamScores[2].color }}>
                       <p className="text-white font-bold text-xl truncate">{teamScores[2].name}</p>
                       <p className="text-kawaYellow font-bold text-xl mt-2">{teamScores[2].score.toLocaleString()}</p>
                       <p className="text-white/40 text-sm">pts</p>
@@ -290,7 +299,7 @@ export default function DisplayPage() {
                   {teamScores.slice(3).map((t, i) => (
                     <div key={t.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
                       <span className="text-white/50 font-bold w-8 text-center text-lg">{i + 4}</span>
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
                       <span className="flex-1 text-white font-semibold text-lg">{t.name}</span>
                       <span className="text-kawaYellow font-bold text-lg">{t.score.toLocaleString()} pts</span>
                     </div>

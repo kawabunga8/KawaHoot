@@ -5,6 +5,15 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, QuizQuestion, Player, Team } from '@/types'
 
+const TEAM_COLOR_HEX: Record<string, string> = {
+  kawared: '#EF4444',
+  kawaBlue: '#3B82F6',
+  kawaYellow: '#F59E0B',
+  kawaCoral: '#F97316',
+  kawaGreen: '#22C55E',
+  kawaPurple: '#7C3AED',
+}
+
 const ANSWER_CONFIG = {
   A: { bg: 'bg-kawared hover:bg-red-500', shape: '▲' },
   B: { bg: 'bg-kawaBlue hover:bg-blue-600', shape: '◆' },
@@ -253,7 +262,7 @@ export default function PlayPage() {
           </p>
           {myTeam && (
             <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
-              style={{ backgroundColor: myTeam.color }}>
+              style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
               👥 {myTeam.name}
             </div>
           )}
@@ -283,7 +292,7 @@ export default function PlayPage() {
             </p>
             {myTeam ? (
               <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
-                style={{ backgroundColor: myTeam.color }}>
+                style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
                 👥 {myTeam.name}
               </div>
             ) : game.mode === 'teams' && (
@@ -318,7 +327,7 @@ export default function PlayPage() {
               <span className="text-white/50 text-sm font-semibold">{player.nickname}</span>
               {myTeam && (
                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-bold text-xs text-white"
-                  style={{ backgroundColor: myTeam.color }}>
+                  style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
                   👥 {myTeam.name}
                 </span>
               )}
@@ -451,7 +460,7 @@ export default function PlayPage() {
                     <p className="text-white/50 text-xs">{myTeamScore?.score.toLocaleString()} pts total</p>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 font-bold text-xs text-white"
-                    style={{ backgroundColor: myTeam.color }}>
+                    style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
                     👥 {myTeam.name}
                   </span>
                 </div>
@@ -475,9 +484,9 @@ export default function PlayPage() {
                 {teamScores.map((t, i) => (
                   <div key={t.id}
                     className={`flex items-center gap-2 p-2 rounded-xl ${t.id === myTeam?.id ? 'border' : ''}`}
-                    style={t.id === myTeam?.id ? { backgroundColor: t.color + '30', borderColor: t.color } : {}}>
+                    style={t.id === myTeam?.id ? { backgroundColor: (TEAM_COLOR_HEX[t.color] ?? t.color) + '30', borderColor: TEAM_COLOR_HEX[t.color] ?? t.color } : {}}>
                     <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
                     <span className={`flex-1 text-left text-sm font-semibold ${t.id === myTeam?.id ? 'text-kawaYellow' : 'text-white'}`}>
                       {t.name}
                     </span>
@@ -553,7 +562,7 @@ export default function PlayPage() {
                     </p>
                   )}
                   <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
-                    style={{ backgroundColor: myTeam.color }}>
+                    style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
                     👥 {myTeam.name}
                   </div>
                 </div>
@@ -581,9 +590,9 @@ export default function PlayPage() {
                 {teamScores.map((t, i) => (
                   <div key={t.id}
                     className={`flex items-center gap-2 p-2 rounded-xl ${t.id === myTeam?.id ? 'border' : ''}`}
-                    style={t.id === myTeam?.id ? { backgroundColor: t.color + '30', borderColor: t.color } : {}}>
+                    style={t.id === myTeam?.id ? { backgroundColor: (TEAM_COLOR_HEX[t.color] ?? t.color) + '30', borderColor: TEAM_COLOR_HEX[t.color] ?? t.color } : {}}>
                     <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
                     <span className={`flex-1 text-left text-sm font-semibold ${t.id === myTeam?.id ? 'text-kawaYellow' : 'text-white'}`}>
                       {t.name}
                     </span>
