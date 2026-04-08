@@ -31,9 +31,8 @@ export default function HomePage() {
       return
     }
     setGameId(data.gameId)
-    const r = data.roster || []
-    setRoster(r)
-    setStep(r.length > 0 ? 'roster' : 'guest')
+    setRoster(data.roster || [])
+    setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
   }
 
   async function handleJoin(e: React.FormEvent) {
@@ -143,22 +142,26 @@ export default function HomePage() {
               >
                 Who are you?
               </h2>
-              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                {roster.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => {
-                      setSelectedPlayer(r)
-                      setNickname(r.nickname)
-                      setStep('nickname')
-                    }}
-                    className="bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple text-white font-bold py-3 px-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm truncate"
-                    style={{ fontFamily: "'Fredoka One', cursive" }}
-                  >
-                    {r.nickname}
-                  </button>
-                ))}
-              </div>
+              {roster.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {roster.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => {
+                        setSelectedPlayer(r)
+                        setNickname(r.nickname)
+                        setStep('nickname')
+                      }}
+                      className="bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple text-white font-bold py-3 px-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm truncate"
+                      style={{ fontFamily: "'Fredoka One', cursive" }}
+                    >
+                      {r.nickname}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-white/40 text-sm text-center py-4">No class list loaded by your teacher.</p>
+              )}
               <div className="pt-1 border-t border-white/10">
                 <button
                   type="button"
@@ -170,89 +173,70 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
-          ) : step === 'nickname' && selectedPlayer ? (
-            <form onSubmit={async (e) => {
-              e.preventDefault()
-              setError('')
-              if (!nickname.trim()) { setError('Enter a nickname!'); return }
-              setLoading(true)
-              await fetch('/api/game/claim-player', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ playerId: selectedPlayer.id, nickname: nickname.trim(), realName: selectedPlayer.nickname }),
-              })
-              setLoading(false)
-              router.push(`/play/${gameId}?playerId=${selectedPlayer.id}`)
-            }} className="space-y-5">
-              <button
-                type="button"
-                onClick={() => setStep('roster')}
-                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
-              >
+          ) : step === 'nickname' ? (
+            // Only reachable from roster step with a selected player — selectedPlayer must be set
+            selectedPlayer ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                setError('')
+                if (!nickname.trim()) { setError('Enter a nickname!'); return }
+                setLoading(true)
+                await fetch('/api/game/claim-player', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ playerId: selectedPlayer.id, nickname: nickname.trim(), realName: selectedPlayer.nickname }),
+                })
+                setLoading(false)
+                router.push(`/play/${gameId}?playerId=${selectedPlayer.id}`)
+              }} className="space-y-5">
+                <button type="button" onClick={() => { setSelectedPlayer(null); setStep('roster') }}
+                  className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
+                  ← Back to class list
+                </button>
+                <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                  Choose Your Nickname
+                </h2>
+                <p className="text-white/50 text-sm text-center -mt-2">
+                  Playing as <span className="text-kawaYellow font-bold">{selectedPlayer.nickname}</span>
+                </p>
+                <input type="text" maxLength={20} value={nickname} onChange={e => setNickname(e.target.value)}
+                  placeholder="e.g. QuizWizard99" autoFocus
+                  className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
+                />
+                {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
+                <button type="submit" disabled={loading}
+                  className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+                  style={{ fontFamily: "'Fredoka One', cursive" }}>
+                  {loading ? 'Joining...' : "Let's Go! 🚀"}
+                </button>
+              </form>
+            ) : (
+              // selectedPlayer somehow null — bounce back to roster
+              <>{setStep('roster')}</>
+            )
+          ) : step === 'guest' ? (
+            // Only reachable from roster step via explicit "Join as Guest" button
+            <form onSubmit={handleJoin} className="space-y-5">
+              <button type="button" onClick={() => setStep('roster')}
+                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
                 ← Back to class list
               </button>
               <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                Choose Your Nickname
+                Join as Guest
               </h2>
-              <p className="text-white/50 text-sm text-center -mt-2">
-                Playing as <span className="text-kawaYellow font-bold">{selectedPlayer.nickname}</span>
-              </p>
-              <input
-                type="text"
-                maxLength={20}
-                value={nickname}
-                onChange={e => setNickname(e.target.value)}
-                placeholder="e.g. QuizWizard99"
-                autoFocus
+              <p className="text-white/50 text-sm text-center -mt-2">Not on the class list? Enter any name to join.</p>
+              <input type="text" maxLength={20} value={nickname} onChange={e => setNickname(e.target.value)}
+                placeholder="Your name or nickname" autoFocus
                 className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
               />
               {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
+              <button type="submit" disabled={loading}
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
-                style={{ fontFamily: "'Fredoka One', cursive" }}
-              >
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? 'Joining...' : "Let's Go! 🚀"}
               </button>
             </form>
-          ) : (
-            <form onSubmit={handleJoin} className="space-y-5">
-              <button
-                type="button"
-                onClick={() => setStep(roster.length > 0 ? 'roster' : 'pin')}
-                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
-              >
-                ← {roster.length > 0 ? 'Back to class list' : `PIN: ${pin}`}
-              </button>
-              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {roster.length > 0 ? 'Join as Guest' : 'Choose Your Nickname'}
-              </h2>
-              {roster.length > 0 && (
-                <p className="text-white/50 text-sm text-center -mt-2">
-                  Not on the class list? Enter any name to join.
-                </p>
-              )}
-              <input
-                type="text"
-                maxLength={20}
-                value={nickname}
-                onChange={e => setNickname(e.target.value)}
-                placeholder={roster.length > 0 ? 'Your name or nickname' : 'e.g. QuizWizard99'}
-                autoFocus
-                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
-              />
-              {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
-                style={{ fontFamily: "'Fredoka One', cursive" }}
-              >
-                {loading ? 'Joining...' : "Let's Go! 🚀"}
-              </button>
-            </form>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-4 my-6">
