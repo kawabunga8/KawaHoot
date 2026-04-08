@@ -117,32 +117,36 @@ export default function PlayPage() {
       }
     }
 
-    if (g.status === 'answer_reveal') {
-      // Fetch leaderboard
-      const { data: players } = await supabase
-        .from('players').select('*').eq('game_id', gameId).order('score', { ascending: false })
+    if (g.status === 'answer_reveal' || g.status === 'finished') {
+      // Fetch leaderboard + refresh teams (teams may not have loaded on mount)
+      const [{ data: players }, { data: teams }] = await Promise.all([
+        supabase.from('players').select('*').eq('game_id', gameId).order('score', { ascending: false }),
+        supabase.from('teams').select('*').eq('game_id', gameId),
+      ])
       setLeaderboard(players || [])
+      if (teams && teams.length > 0) setAllTeams(teams)
       const rank = (players || []).findIndex(p => p.id === playerId) + 1
       setMyRank(rank > 0 ? rank : null)
 
-      // Now reveal this player's answer result and update their score
-      if (playerId && currentQuestionRef.current) {
-        const { data: answer } = await supabase
-          .from('answers')
-          .select('is_correct, points_earned, selected_answer')
-          .eq('player_id', playerId)
-          .eq('question_id', currentQuestionRef.current.id)
-          .single()
-        if (answer) {
-          setAnswerResult({
-            correct: answer.is_correct,
-            points: answer.points_earned,
-            selected: answer.selected_answer as AnswerKey,
-            correctAnswer: currentQuestionRef.current.correct_answer as AnswerKey,
-          })
-          // Update displayed score from the authoritative DB value
-          const me = (players || []).find(p => p.id === playerId)
-          if (me) setPlayer(prev => prev ? { ...prev, score: me.score } : prev)
+      if (g.status === 'answer_reveal') {
+        // Reveal this player's answer result and update their score
+        if (playerId && currentQuestionRef.current) {
+          const { data: answer } = await supabase
+            .from('answers')
+            .select('is_correct, points_earned, selected_answer')
+            .eq('player_id', playerId)
+            .eq('question_id', currentQuestionRef.current.id)
+            .single()
+          if (answer) {
+            setAnswerResult({
+              correct: answer.is_correct,
+              points: answer.points_earned,
+              selected: answer.selected_answer as AnswerKey,
+              correctAnswer: currentQuestionRef.current.correct_answer as AnswerKey,
+            })
+            const me = (players || []).find(p => p.id === playerId)
+            if (me) setPlayer(prev => prev ? { ...prev, score: me.score } : prev)
+          }
         }
       }
     }
