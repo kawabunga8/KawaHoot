@@ -89,8 +89,13 @@ export default function DisplayPage() {
 
   // Teams
   useEffect(() => {
+    const poll = setInterval(() => {
+      supabase.from('teams').select('*').eq('game_id', id)
+        .then(({ data }) => setTeams(data || []))
+    }, 3000)
     supabase.from('teams').select('*').eq('game_id', id)
       .then(({ data }) => setTeams(data || []))
+    return () => clearInterval(poll)
   }, [id, supabase])
 
   // Players
@@ -188,43 +193,43 @@ export default function DisplayPage() {
         </div>
       )}
 
-      {/* SCORES: full-screen leaderboard, question hidden */}
+      {/* SCORES: full-screen leaderboard */}
       {game.status === 'scores' && (
-        <div className="flex-1 flex items-center justify-center px-8 py-6">
-          <div className="w-full max-w-lg bg-white/10 border border-white/20 rounded-3xl p-8">
-                {game.mode === 'teams' && teamScores.length > 0 ? (
-                  <>
-                    <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                      Team Scores
-                    </h3>
-                    <div className="space-y-4">
-                      {teamScores.map((t, i) => (
-                        <div key={t.id} className="flex items-center gap-4 p-4 rounded-2xl"
-                          style={{ backgroundColor: (TEAM_COLOR_HEX[t.color] ?? t.color) + '30' }}>
-                          <span className="text-3xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                          <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
-                          <span className="flex-1 text-white font-bold text-xl truncate">{t.name}</span>
-                          <span className="text-kawaYellow font-bold text-xl">{t.score.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                      Top Players
-                    </h3>
-                    <div className="space-y-4">
-                      {players.slice(0, 5).map((p, i) => (
-                        <div key={p.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/10">
-                          <span className="text-3xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                          <span className="flex-1 text-white font-bold text-xl truncate">{p.nickname}</span>
-                          <span className="text-kawaYellow font-bold text-xl">{p.score.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+        <div className="flex-1 flex items-center justify-center gap-6 px-8 py-6">
+          {/* Team scores — only in teams mode */}
+          {game.mode === 'teams' && teamScores.length > 0 && (
+            <div className="w-full max-w-md bg-white/10 border border-white/20 rounded-3xl p-8">
+              <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                Team Scores
+              </h3>
+              <div className="space-y-4">
+                {teamScores.map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-4 p-4 rounded-2xl"
+                    style={{ backgroundColor: (TEAM_COLOR_HEX[t.color] ?? t.color) + '30' }}>
+                    <span className="text-3xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
+                    <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
+                    <span className="flex-1 text-white font-bold text-xl truncate">{t.name}</span>
+                    <span className="text-kawaYellow font-bold text-xl">{t.score.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Individual leaderboard — always shown */}
+          <div className="w-full max-w-md bg-white/10 border border-white/20 rounded-3xl p-8">
+            <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+              Top Players
+            </h3>
+            <div className="space-y-4">
+              {players.slice(0, 5).map((p, i) => (
+                <div key={p.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/10">
+                  <span className="text-3xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
+                  <span className="flex-1 text-white font-bold text-xl truncate">{p.nickname}</span>
+                  <span className="text-kawaYellow font-bold text-xl">{p.score.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
