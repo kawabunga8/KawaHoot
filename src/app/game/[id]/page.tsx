@@ -431,7 +431,7 @@ export default function GameHostPage() {
         window.open(url, '_blank',
           `left=${ext.availLeft},top=${ext.availTop},width=${ext.availWidth},height=${ext.availHeight}`)
         return
-      } catch (_e) { /* permission denied or unsupported */ }
+      } catch { /* permission denied or unsupported */ }
     }
     window.open(url, '_blank')
   }
