@@ -968,7 +968,7 @@ export default function GameHostPage() {
               <button onClick={revealAnswer} disabled={loading}
                 className="flex-1 bg-kawaCoral hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {loading ? '...' : 'Reveal Answer →'}
+                {loading ? '...' : 'Show Scores →'}
               </button>
             )}
             {game.status === 'answer_reveal' && (
