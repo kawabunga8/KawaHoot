@@ -33,12 +33,26 @@ export default function PlayPage() {
   const [myRank, setMyRank] = useState<number | null>(null)
   const [followingReplay, setFollowingReplay] = useState(false)
   const [myTeam, setMyTeam] = useState<Team | null>(null)
+  const [allTeams, setAllTeams] = useState<Team[]>([])
+
+  const teamScores = useMemo(() =>
+    allTeams.map(t => ({
+      ...t,
+      score: leaderboard.filter(p => p.team_id === t.id).reduce((sum, p) => sum + p.score, 0),
+    })).sort((a, b) => b.score - a.score),
+  [allTeams, leaderboard])
 
   // Keep current game/question in refs so async callbacks always see the latest value
   const gameRef = useRef<Game | null>(null)
   gameRef.current = game
   const currentQuestionRef = useRef<QuizQuestion | null>(null)
   currentQuestionRef.current = currentQuestion
+
+  // Load all teams once
+  useEffect(() => {
+    supabase.from('teams').select('*').eq('game_id', gameId)
+      .then(({ data }) => setAllTeams(data || []))
+  }, [gameId, supabase])
 
   // Load player + team once; re-check team whenever player's team_id might change
   useEffect(() => {
@@ -238,7 +252,10 @@ export default function PlayPage() {
             {player.nickname}
           </p>
           {myTeam && (
-            <p className="text-white/70 font-semibold mt-2 text-sm">👥 {myTeam.name}</p>
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
+              style={{ backgroundColor: myTeam.color }}>
+              👥 {myTeam.name}
+            </div>
           )}
         </div>
       </div>
@@ -264,10 +281,13 @@ export default function PlayPage() {
             <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
               {player.nickname}
             </p>
-            {myTeam && (
-              <p className="text-white/70 font-semibold mt-2 text-sm">
+            {myTeam ? (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
+                style={{ backgroundColor: myTeam.color }}>
                 👥 {myTeam.name}
-              </p>
+              </div>
+            ) : game.mode === 'teams' && (
+              <p className="text-white/40 text-sm mt-3 animate-pulse">⏳ Waiting for team assignment...</p>
             )}
           </div>
           <div className="mt-8 flex justify-center gap-1">
@@ -294,9 +314,14 @@ export default function PlayPage() {
         </div>
         <div className="flex-1 flex flex-col p-4">
           <div className="flex items-center justify-between mb-4">
-            <div>
+            <div className="flex flex-col gap-1">
               <span className="text-white/50 text-sm font-semibold">{player.nickname}</span>
-              {myTeam && <p className="text-white/40 text-xs">👥 {myTeam.name}</p>}
+              {myTeam && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-bold text-xs text-white"
+                  style={{ backgroundColor: myTeam.color }}>
+                  👥 {myTeam.name}
+                </span>
+              )}
             </div>
             <span className={`font-bold text-2xl ${timeLeft <= 5 ? 'text-kawared animate-pulse' : 'text-kawaYellow'}`}
               style={{ fontFamily: "'Fredoka One', cursive" }}>
@@ -414,18 +439,54 @@ export default function PlayPage() {
           </div>
 
           {/* Rank */}
-          {myRank && (
+          {game.mode === 'teams' && myTeam ? (
+            (() => {
+              const teamRank = teamScores.findIndex(t => t.id === myTeam.id) + 1
+              const myTeamScore = teamScores.find(t => t.id === myTeam.id)
+              return teamRank > 0 ? (
+                <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3">
+                  <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>#{teamRank}</p>
+                  <div className="flex-1">
+                    <p className="text-white font-semibold text-sm">Team Rank</p>
+                    <p className="text-white/50 text-xs">{myTeamScore?.score.toLocaleString()} pts total</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 font-bold text-xs text-white"
+                    style={{ backgroundColor: myTeam.color }}>
+                    👥 {myTeam.name}
+                  </span>
+                </div>
+              ) : null
+            })()
+          ) : myRank ? (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3">
               <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>#{myRank}</p>
-              <div>
+              <div className="flex-1">
                 <p className="text-white font-semibold text-sm">Your Rank</p>
                 <p className="text-white/50 text-xs">{player.score.toLocaleString()} pts total</p>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Leaderboard */}
-          {leaderboard.length > 0 && (
+          {game.mode === 'teams' && teamScores.length > 0 ? (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+              <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Team Scores</h3>
+              <div className="space-y-2">
+                {teamScores.map((t, i) => (
+                  <div key={t.id}
+                    className={`flex items-center gap-2 p-2 rounded-xl ${t.id === myTeam?.id ? 'border' : ''}`}
+                    style={t.id === myTeam?.id ? { backgroundColor: t.color + '30', borderColor: t.color } : {}}>
+                    <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className={`flex-1 text-left text-sm font-semibold ${t.id === myTeam?.id ? 'text-kawaYellow' : 'text-white'}`}>
+                      {t.name}
+                    </span>
+                    <span className="text-white/70 text-sm font-bold">{t.score.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : leaderboard.length > 0 ? (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
               <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Leaderboard</h3>
               <div className="space-y-2">
@@ -441,7 +502,7 @@ export default function PlayPage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           <p className="text-white/30 text-xs text-center animate-pulse">Waiting for next question...</p>
         </div>
@@ -476,20 +537,62 @@ export default function PlayPage() {
           </div>
 
           {/* Score card */}
-          <div className={`rounded-2xl p-5 border ${myRank === 1 ? 'bg-kawaYellow/20 border-kawaYellow/60' : 'bg-white/10 border-white/20'}`}>
-            <p className="text-white/60 text-sm mb-1">Final Score</p>
-            <p className="text-kawaYellow font-bold text-6xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
-              {player.score.toLocaleString()}
-            </p>
-            {myRank && (
-              <p className="text-white/70 font-semibold mt-1">
-                {myRank === 1 ? '🏆 Champion!' : myRank === 2 ? 'Runner Up' : myRank === 3 ? 'Third Place' : `Rank #${myRank}`}
+          {game.mode === 'teams' && myTeam ? (
+            (() => {
+              const teamRank = teamScores.findIndex(t => t.id === myTeam.id) + 1
+              const myTeamScore = teamScores.find(t => t.id === myTeam.id)
+              return (
+                <div className={`rounded-2xl p-5 border ${teamRank === 1 ? 'bg-kawaYellow/20 border-kawaYellow/60' : 'bg-white/10 border-white/20'}`}>
+                  <p className="text-white/60 text-sm mb-1">Team Score</p>
+                  <p className="text-kawaYellow font-bold text-6xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    {myTeamScore?.score.toLocaleString() ?? '0'}
+                  </p>
+                  {teamRank > 0 && (
+                    <p className="text-white/70 font-semibold mt-1">
+                      {teamRank === 1 ? '🏆 Champions!' : teamRank === 2 ? 'Runners Up' : teamRank === 3 ? 'Third Place' : `Rank #${teamRank}`}
+                    </p>
+                  )}
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-bold text-sm text-white"
+                    style={{ backgroundColor: myTeam.color }}>
+                    👥 {myTeam.name}
+                  </div>
+                </div>
+              )
+            })()
+          ) : (
+            <div className={`rounded-2xl p-5 border ${myRank === 1 ? 'bg-kawaYellow/20 border-kawaYellow/60' : 'bg-white/10 border-white/20'}`}>
+              <p className="text-white/60 text-sm mb-1">Final Score</p>
+              <p className="text-kawaYellow font-bold text-6xl" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {player.score.toLocaleString()}
               </p>
-            )}
-          </div>
+              {myRank && (
+                <p className="text-white/70 font-semibold mt-1">
+                  {myRank === 1 ? '🏆 Champion!' : myRank === 2 ? 'Runner Up' : myRank === 3 ? 'Third Place' : `Rank #${myRank}`}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Leaderboard */}
-          {leaderboard.length > 0 && (
+          {game.mode === 'teams' && teamScores.length > 0 ? (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+              <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Final Team Scores</h3>
+              <div className="space-y-2">
+                {teamScores.map((t, i) => (
+                  <div key={t.id}
+                    className={`flex items-center gap-2 p-2 rounded-xl ${t.id === myTeam?.id ? 'border' : ''}`}
+                    style={t.id === myTeam?.id ? { backgroundColor: t.color + '30', borderColor: t.color } : {}}>
+                    <span className="text-base w-6">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className={`flex-1 text-left text-sm font-semibold ${t.id === myTeam?.id ? 'text-kawaYellow' : 'text-white'}`}>
+                      {t.name}
+                    </span>
+                    <span className="text-white/70 text-sm font-bold">{t.score.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : leaderboard.length > 0 ? (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
               <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Final Leaderboard</h3>
               <div className="space-y-2">
@@ -505,7 +608,7 @@ export default function PlayPage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           <p className="text-white/30 text-xs animate-pulse">
             🔁 If the teacher replays, you&apos;ll be moved automatically

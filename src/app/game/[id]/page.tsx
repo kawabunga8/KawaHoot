@@ -52,6 +52,13 @@ export default function GameHostPage() {
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
 
+  const teamScores = useMemo(() =>
+    teams.map(t => ({
+      ...t,
+      score: players.filter(p => p.team_id === t.id).reduce((sum, p) => sum + p.score, 0),
+    })).sort((a, b) => b.score - a.score),
+  [teams, players])
+
   // Load classes from shared API (group-maker data)
   useEffect(() => {
     fetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
@@ -164,17 +171,28 @@ export default function GameHostPage() {
     return () => clearInterval(poll)
   }, [currentQuestion?.id, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Countdown timer
+  // Countdown timer — auto-reveals answer when time runs out
+  const autoRevealedRef = useRef(false)
   useEffect(() => {
     if (!game || game.status !== 'question' || !currentQuestion || !game.current_question_started_at) return
+    autoRevealedRef.current = false
     const startedAt = new Date(game.current_question_started_at).getTime()
     const tick = setInterval(() => {
       const left = Math.max(0, currentQuestion.time_limit - (Date.now() - startedAt) / 1000)
       setTimeLeft(Math.ceil(left))
-      if (left <= 0) clearInterval(tick)
+      if (left <= 0) {
+        clearInterval(tick)
+        if (!autoRevealedRef.current) {
+          autoRevealedRef.current = true
+          fetch('/api/game/reveal', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gameId: id }),
+          })
+        }
+      }
     }, 200)
     return () => clearInterval(tick)
-  }, [game?.status, game?.current_question_started_at, currentQuestion]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [game?.status, game?.current_question_started_at, currentQuestion, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const TEAM_PRESETS = [
     { name: 'Red Team', color: 'kawared' },
@@ -738,8 +756,9 @@ export default function GameHostPage() {
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
               <div className="flex flex-wrap gap-2 justify-center">
                 {players.map(p => (
-                  <span key={p.id} className="bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold px-3 py-1.5 rounded-full animate-bounce-in">
+                  <span key={p.id} className="inline-flex items-center gap-1 bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold pl-3 pr-1.5 py-1.5 rounded-full animate-bounce-in">
                     {p.nickname}
+                    <button onClick={() => markAbsent(p.id)} className="text-white/40 hover:text-kawared transition-colors leading-none" title="Remove player">×</button>
                   </span>
                 ))}
               </div>
@@ -756,13 +775,12 @@ export default function GameHostPage() {
                 </p>
                 <div className="flex flex-wrap gap-2 min-h-[36px]">
                   {players.filter(p => !p.team_id).map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)}
-                      className={`text-white text-sm font-bold px-3 py-1.5 rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white' : 'bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple/60'}`}
-                    >
-                      {p.nickname}
-                    </button>
+                    <span key={p.id} className={`inline-flex items-center gap-1 text-sm font-bold rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white pl-3 pr-1.5 py-1.5' : 'bg-kawaPurple/40 border border-kawaPurple text-white pl-3 pr-1.5 py-1.5'}`}>
+                      <button onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)} className="font-bold">
+                        {p.nickname}
+                      </button>
+                      <button onClick={() => markAbsent(p.id)} className="text-current opacity-40 hover:opacity-100 hover:text-kawared transition-all leading-none" title="Remove player">×</button>
+                    </span>
                   ))}
                   {players.filter(p => !p.team_id).length === 0 && (
                     <p className="text-white/30 text-sm italic">All players assigned</p>
@@ -836,14 +854,16 @@ export default function GameHostPage() {
 
           {(() => {
             const unclaimed = players.filter(p => p.is_pre_registered && !p.is_claimed)
-            const blocked = unclaimed.length > 0
+            const unassigned = game.mode === 'teams' ? players.filter(p => !p.team_id) : []
+            const blocked = unclaimed.length > 0 || unassigned.length > 0
             return (
               <button onClick={startGame} disabled={loading || players.length === 0 || blocked}
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? 'Starting...'
                   : players.length === 0 ? 'Waiting for players...'
-                  : blocked ? `⏳ Waiting for ${unclaimed.length} student${unclaimed.length !== 1 ? 's' : ''} to join...`
+                  : unclaimed.length > 0 ? `⏳ Waiting for ${unclaimed.length} student${unclaimed.length !== 1 ? 's' : ''} to join...`
+                  : unassigned.length > 0 ? `👥 ${unassigned.length} player${unassigned.length !== 1 ? 's' : ''} not assigned to a team`
                   : `Start Game (${players.length} players) 🚀`}
               </button>
             )
@@ -913,7 +933,22 @@ export default function GameHostPage() {
             })}
           </div>
 
-          {game.status === 'answer_reveal' && leaderboard.length > 0 && (
+          {game.status === 'answer_reveal' && game.mode === 'teams' && teamScores.length > 0 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
+              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Team Scores</h3>
+              <div className="space-y-2">
+                {teamScores.map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-3">
+                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="flex-1 text-white font-semibold">{t.name}</span>
+                    <span className="text-kawaYellow font-bold">{t.score.toLocaleString()} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {game.status === 'answer_reveal' && game.mode !== 'teams' && leaderboard.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
               <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Top Players</h3>
               <div className="space-y-2">
@@ -1018,8 +1053,9 @@ export default function GameHostPage() {
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 mb-5">
               <div className="flex flex-wrap gap-2 justify-center">
                 {players.map(p => (
-                  <span key={p.id} className="bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold px-3 py-1.5 rounded-full">
+                  <span key={p.id} className="inline-flex items-center gap-1 bg-kawaPurple/40 border border-kawaPurple text-white text-sm font-bold pl-3 pr-1.5 py-1.5 rounded-full">
                     {p.nickname}
+                    <button onClick={() => markAbsent(p.id)} className="text-white/40 hover:text-kawared transition-colors leading-none" title="Remove player">×</button>
                   </span>
                 ))}
               </div>
@@ -1035,13 +1071,12 @@ export default function GameHostPage() {
                 </p>
                 <div className="flex flex-wrap gap-2 min-h-[36px]">
                   {players.filter(p => !p.team_id).map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)}
-                      className={`text-white text-sm font-bold px-3 py-1.5 rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white' : 'bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple/60'}`}
-                    >
-                      {p.nickname}
-                    </button>
+                    <span key={p.id} className={`inline-flex items-center gap-1 text-sm font-bold rounded-full transition-all ${assigningPlayer === p.id ? 'bg-kawaYellow text-kawaDark scale-110 ring-2 ring-white pl-3 pr-1.5 py-1.5' : 'bg-kawaPurple/40 border border-kawaPurple text-white pl-3 pr-1.5 py-1.5'}`}>
+                      <button onClick={() => setAssigningPlayer(assigningPlayer === p.id ? null : p.id)} className="font-bold">
+                        {p.nickname}
+                      </button>
+                      <button onClick={() => markAbsent(p.id)} className="text-current opacity-40 hover:opacity-100 hover:text-kawared transition-all leading-none" title="Remove player">×</button>
+                    </span>
                   ))}
                   {players.filter(p => !p.team_id).length === 0 && (
                     <p className="text-white/30 text-sm italic">All players assigned</p>

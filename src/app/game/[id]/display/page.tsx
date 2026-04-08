@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Game, Player, QuizQuestion } from '@/types'
+import type { Game, Player, QuizQuestion, Team } from '@/types'
 
 const ANSWER_COLORS = {
   A: { bg: 'bg-kawared', text: 'text-white', shape: '▲' },
@@ -20,8 +20,16 @@ export default function DisplayPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentQuestion, setCurrentQuestion] = useState<QuizQuestion | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
   const [answerCounts, setAnswerCounts] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [timeLeft, setTimeLeft] = useState(0)
+
+  const teamScores = useMemo(() =>
+    teams.map(t => ({
+      ...t,
+      score: players.filter(p => p.team_id === t.id).reduce((sum, p) => sum + p.score, 0),
+    })).sort((a, b) => b.score - a.score),
+  [teams, players])
 
   // Initial load
   useEffect(() => {
@@ -68,6 +76,12 @@ export default function DisplayPage() {
       })
       .subscribe()
     return () => { clearInterval(poll); supabase.removeChannel(sub) }
+  }, [id, supabase])
+
+  // Teams
+  useEffect(() => {
+    supabase.from('teams').select('*').eq('game_id', id)
+      .then(({ data }) => setTeams(data || []))
   }, [id, supabase])
 
   // Players
@@ -239,58 +253,106 @@ export default function DisplayPage() {
           <div className="text-8xl mb-4">🏆</div>
           <h2 className="text-white font-bold text-6xl mb-8" style={{ fontFamily: "'Fredoka One', cursive" }}>Game Over!</h2>
 
-          {players.length >= 1 && (
-            <div className="flex items-end justify-center gap-6 w-full max-w-2xl">
-              {players[1] && (
+          {game.mode === 'teams' && teamScores.length > 0 ? (
+            <>
+              <div className="flex items-end justify-center gap-6 w-full max-w-2xl">
+                {teamScores[1] && (
+                  <div className="flex-1 text-center">
+                    <div className="text-4xl mb-2">🥈</div>
+                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/30" style={{ height: 140, backgroundColor: teamScores[1].color + '40', borderColor: teamScores[1].color }}>
+                      <p className="text-white font-bold text-xl truncate">{teamScores[1].name}</p>
+                      <p className="text-kawaYellow font-bold text-2xl mt-2">{teamScores[1].score.toLocaleString()}</p>
+                      <p className="text-white/40 text-sm">pts</p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex-1 text-center">
-                  <div className="text-4xl mb-2">🥈</div>
-                  <div className="bg-white/20 border border-white/30 rounded-t-2xl px-4 py-4" style={{ height: 140 }}>
-                    <p className="text-white font-bold text-xl truncate">{players[1].nickname}</p>
-                    {players[1].real_name && players[1].real_name !== players[1].nickname && (
-                      <p className="text-white/50 text-sm truncate">{players[1].real_name}</p>
-                    )}
-                    <p className="text-kawaYellow font-bold text-2xl mt-1">{players[1].score.toLocaleString()}</p>
+                  <div className="text-5xl mb-2">🥇</div>
+                  <div className="rounded-t-2xl px-4 py-4 border-4" style={{ height: 180, backgroundColor: teamScores[0].color + '50', borderColor: teamScores[0].color }}>
+                    <p className="text-white font-bold text-2xl truncate">{teamScores[0].name}</p>
+                    <p className="text-kawaYellow font-bold text-3xl mt-2">{teamScores[0].score.toLocaleString()}</p>
                     <p className="text-white/40 text-sm">pts</p>
                   </div>
                 </div>
-              )}
-              <div className="flex-1 text-center">
-                <div className="text-5xl mb-2">🥇</div>
-                <div className="bg-kawaYellow/30 border-2 border-kawaYellow rounded-t-2xl px-4 py-4" style={{ height: 180 }}>
-                  <p className="text-white font-bold text-2xl truncate">{players[0].nickname}</p>
-                  {players[0].real_name && players[0].real_name !== players[0].nickname && (
-                    <p className="text-white/50 text-sm truncate">{players[0].real_name}</p>
-                  )}
-                  <p className="text-kawaYellow font-bold text-3xl mt-1">{players[0].score.toLocaleString()}</p>
-                  <p className="text-white/40 text-sm">pts</p>
-                </div>
+                {teamScores[2] && (
+                  <div className="flex-1 text-center">
+                    <div className="text-4xl mb-2">🥉</div>
+                    <div className="rounded-t-2xl px-4 py-4 border-2 border-white/20" style={{ height: 110, backgroundColor: teamScores[2].color + '30', borderColor: teamScores[2].color }}>
+                      <p className="text-white font-bold text-xl truncate">{teamScores[2].name}</p>
+                      <p className="text-kawaYellow font-bold text-xl mt-2">{teamScores[2].score.toLocaleString()}</p>
+                      <p className="text-white/40 text-sm">pts</p>
+                    </div>
+                  </div>
+                )}
               </div>
-              {players[2] && (
-                <div className="flex-1 text-center">
-                  <div className="text-4xl mb-2">🥉</div>
-                  <div className="bg-white/10 border border-white/20 rounded-t-2xl px-4 py-4" style={{ height: 110 }}>
-                    <p className="text-white font-bold text-xl truncate">{players[2].nickname}</p>
-                    {players[2].real_name && players[2].real_name !== players[2].nickname && (
-                      <p className="text-white/50 text-sm truncate">{players[2].real_name}</p>
-                    )}
-                    <p className="text-kawaYellow font-bold text-xl mt-1">{players[2].score.toLocaleString()}</p>
-                    <p className="text-white/40 text-sm">pts</p>
-                  </div>
+              {teamScores.length > 3 && (
+                <div className="mt-6 w-full max-w-2xl bg-white/10 border border-white/20 rounded-2xl p-4 space-y-2">
+                  {teamScores.slice(3).map((t, i) => (
+                    <div key={t.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
+                      <span className="text-white/50 font-bold w-8 text-center text-lg">{i + 4}</span>
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                      <span className="flex-1 text-white font-semibold text-lg">{t.name}</span>
+                      <span className="text-kawaYellow font-bold text-lg">{t.score.toLocaleString()} pts</span>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-          )}
-
-          {players.length > 3 && (
-            <div className="mt-6 w-full max-w-2xl bg-white/10 border border-white/20 rounded-2xl p-4 space-y-2">
-              {players.slice(3, 8).map((p, i) => (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
-                  <span className="text-white/50 font-bold w-8 text-center text-lg">{i + 4}</span>
-                  <span className="flex-1 text-white font-semibold text-lg">{p.nickname}</span>
-                  <span className="text-kawaYellow font-bold text-lg">{p.score.toLocaleString()} pts</span>
+            </>
+          ) : (
+            <>
+              {players.length >= 1 && (
+                <div className="flex items-end justify-center gap-6 w-full max-w-2xl">
+                  {players[1] && (
+                    <div className="flex-1 text-center">
+                      <div className="text-4xl mb-2">🥈</div>
+                      <div className="bg-white/20 border border-white/30 rounded-t-2xl px-4 py-4" style={{ height: 140 }}>
+                        <p className="text-white font-bold text-xl truncate">{players[1].nickname}</p>
+                        {players[1].real_name && players[1].real_name !== players[1].nickname && (
+                          <p className="text-white/50 text-sm truncate">{players[1].real_name}</p>
+                        )}
+                        <p className="text-kawaYellow font-bold text-2xl mt-1">{players[1].score.toLocaleString()}</p>
+                        <p className="text-white/40 text-sm">pts</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex-1 text-center">
+                    <div className="text-5xl mb-2">🥇</div>
+                    <div className="bg-kawaYellow/30 border-2 border-kawaYellow rounded-t-2xl px-4 py-4" style={{ height: 180 }}>
+                      <p className="text-white font-bold text-2xl truncate">{players[0].nickname}</p>
+                      {players[0].real_name && players[0].real_name !== players[0].nickname && (
+                        <p className="text-white/50 text-sm truncate">{players[0].real_name}</p>
+                      )}
+                      <p className="text-kawaYellow font-bold text-3xl mt-1">{players[0].score.toLocaleString()}</p>
+                      <p className="text-white/40 text-sm">pts</p>
+                    </div>
+                  </div>
+                  {players[2] && (
+                    <div className="flex-1 text-center">
+                      <div className="text-4xl mb-2">🥉</div>
+                      <div className="bg-white/10 border border-white/20 rounded-t-2xl px-4 py-4" style={{ height: 110 }}>
+                        <p className="text-white font-bold text-xl truncate">{players[2].nickname}</p>
+                        {players[2].real_name && players[2].real_name !== players[2].nickname && (
+                          <p className="text-white/50 text-sm truncate">{players[2].real_name}</p>
+                        )}
+                        <p className="text-kawaYellow font-bold text-xl mt-1">{players[2].score.toLocaleString()}</p>
+                        <p className="text-white/40 text-sm">pts</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              )}
+              {players.length > 3 && (
+                <div className="mt-6 w-full max-w-2xl bg-white/10 border border-white/20 rounded-2xl p-4 space-y-2">
+                  {players.slice(3, 8).map((p, i) => (
+                    <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5">
+                      <span className="text-white/50 font-bold w-8 text-center text-lg">{i + 4}</span>
+                      <span className="flex-1 text-white font-semibold text-lg">{p.nickname}</span>
+                      <span className="text-kawaYellow font-bold text-lg">{p.score.toLocaleString()} pts</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

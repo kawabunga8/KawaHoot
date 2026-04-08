@@ -265,7 +265,7 @@ export default function HostPage() {
             <div className="bg-black/20 rounded-xl p-4 text-xs text-white/50 font-mono">
               <p className="text-white/70 font-bold mb-1 font-sans text-sm">Required columns:</p>
               <p>question, option_a, option_b, option_c, option_d, correct_answer (A/B/C/D)</p>
-              <p className="mt-1">Optional: time_limit (seconds, default 20)</p>
+              <p className="mt-1">Optional: time_limit (seconds, default 30)</p>
             </div>
           </div>
 
