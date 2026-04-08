@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   // Update the guest player with the real name
   const { error: updateError } = await supabase
     .from('players')
-    .update({ nickname: realName, real_name: realName })
+    .update({ nickname: realName })
     .eq('id', guestPlayerId)
 
   if (updateError) {

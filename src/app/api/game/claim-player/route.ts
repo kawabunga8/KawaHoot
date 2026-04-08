@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { error } = await supabase
     .from('players')
-    .update({ nickname: chosenNickname, real_name: realName || null, is_claimed: true })
+    .update({ nickname: chosenNickname, is_claimed: true })
     .eq('id', playerId)
 
   if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })

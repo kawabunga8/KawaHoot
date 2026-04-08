@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         // Update to ensure is_pre_registered=true and is_claimed=false (re-import resets claim)
         const { error: updateError } = await admin
           .from('players')
-          .update({ is_pre_registered: true, is_claimed: false, real_name: nickname })
+          .update({ is_pre_registered: true, is_claimed: false })
           .eq('id', existing.id)
         if (updateError) console.log(`[pre_register] update error for ${nickname}: ${updateError.message}`)
         results.push({ nickname, playerId: existing.id })
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       }
       const { data: player, error: insertError } = await admin
         .from('players')
-        .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true, is_claimed: false })
+        .insert({ game_id: gameId, nickname, score: 0, is_pre_registered: true, is_claimed: false })
         .select('id').single()
       if (insertError) {
         console.log(`[pre_register] insert error for ${nickname}: ${insertError.message}`)
