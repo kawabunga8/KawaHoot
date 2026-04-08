@@ -228,12 +228,13 @@ export default function GameHostPage() {
     const present = cls.students.filter(s => attendance[s.full_name] !== false).map(s => s.full_name)
     if (!present.length) return
     setImportingStudents(true)
+    setImportedCount(present.length) // set immediately so button changes right away
     const res = await fetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
     })
     const data = await res.json()
-    setImportedCount(data.players?.length ?? present.length)
+    if (data.players?.length) setImportedCount(data.players.length)
     setImportingStudents(false)
   }, [id, classes, selectedClassId, attendance])
 
