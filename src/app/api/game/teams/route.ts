@@ -53,23 +53,34 @@ export async function POST(req: NextRequest) {
   if (action === 'pre_register') {
     const admin = createAdminClient()
     const { names } = body as { names: string[] }
+    console.log(`[pre_register] gameId=${gameId} names=${names.length}`)
     const results: { nickname: string; playerId: string }[] = []
     const errors: string[] = []
     for (const nickname of names) {
-      // Skip if already exists in this game
+      // Check if already pre-registered in this game
       const { data: existing } = await admin
-        .from('players').select('id').eq('game_id', gameId).ilike('nickname', nickname).single()
+        .from('players').select('id, is_pre_registered').eq('game_id', gameId).ilike('nickname', nickname).single()
       if (existing) {
+        // Update to ensure is_pre_registered=true and is_claimed=false (re-import resets claim)
+        const { error: updateError } = await admin
+          .from('players')
+          .update({ is_pre_registered: true, is_claimed: false, real_name: nickname })
+          .eq('id', existing.id)
+        if (updateError) console.log(`[pre_register] update error for ${nickname}: ${updateError.message}`)
         results.push({ nickname, playerId: existing.id })
         continue
       }
       const { data: player, error: insertError } = await admin
         .from('players')
         .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true, is_claimed: false })
-        .select().single()
-      if (insertError) errors.push(`${nickname}: ${insertError.message}`)
+        .select('id').single()
+      if (insertError) {
+        console.log(`[pre_register] insert error for ${nickname}: ${insertError.message}`)
+        errors.push(`${nickname}: ${insertError.message}`)
+      }
       if (player) results.push({ nickname, playerId: player.id })
     }
+    console.log(`[pre_register] done: ${results.length} registered, ${errors.length} errors`)
     if (errors.length > 0) {
       return NextResponse.json({ success: false, error: errors[0], errors, players: results }, { status: 500 })
     }
