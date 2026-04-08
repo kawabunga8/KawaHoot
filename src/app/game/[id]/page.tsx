@@ -232,8 +232,6 @@ export default function GameHostPage() {
       body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
     })
     setImportingStudents(false)
-    setSelectedClassId(null)
-    setAttendance({})
   }, [id, classes, selectedClassId, attendance])
 
   const markAbsent = useCallback(async (playerId: string) => {
@@ -703,14 +701,36 @@ export default function GameHostPage() {
                             )
                           })}
                         </div>
-                        <button
-                          onClick={importStudents}
-                          disabled={importingStudents || presentCount === 0}
-                          className="w-full mt-3 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
-                          style={{ fontFamily: "'Fredoka One', cursive" }}
-                        >
-                          {importingStudents ? 'Importing...' : `Import ${presentCount} Present Student${presentCount !== 1 ? 's' : ''}`}
-                        </button>
+                        {(() => {
+                          const preReg = players.filter(p => p.is_pre_registered)
+                          const claimed = preReg.filter(p => p.is_claimed).length
+                          const total = preReg.length
+                          if (total > 0) {
+                            const ratio = total > 0 ? claimed / total : 0
+                            const bg = ratio === 1 ? 'bg-kawaGreen' : ratio >= 0.5 ? 'bg-kawaYellow' : 'bg-kawaCoral'
+                            const fg = ratio >= 0.5 ? 'text-kawaDark' : 'text-white'
+                            return (
+                              <button
+                                onClick={importStudents}
+                                disabled={importingStudents}
+                                className={`w-full mt-3 ${bg} disabled:opacity-70 ${fg} font-bold py-3 rounded-xl transition-all`}
+                                style={{ fontFamily: "'Fredoka One', cursive" }}
+                              >
+                                {importingStudents ? 'Importing...' : `Imported ✓ — ${claimed}/${total} joined`}
+                              </button>
+                            )
+                          }
+                          return (
+                            <button
+                              onClick={importStudents}
+                              disabled={importingStudents || presentCount === 0}
+                              className="w-full mt-3 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
+                              style={{ fontFamily: "'Fredoka One', cursive" }}
+                            >
+                              {importingStudents ? 'Importing...' : `Import ${presentCount} Present Student${presentCount !== 1 ? 's' : ''}`}
+                            </button>
+                          )
+                        })()}
                       </div>
                     )
                   })()}
