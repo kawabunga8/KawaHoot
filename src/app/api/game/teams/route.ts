@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /** POST /api/game/teams
  *  body: { gameId, action: 'create' | 'assign' | 'delete' | 'set_mode', ...rest }
@@ -50,17 +51,18 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'pre_register') {
+    const admin = createAdminClient()
     const { names } = body as { names: string[] }
     const results: { nickname: string; playerId: string }[] = []
     for (const nickname of names) {
       // Skip if already exists in this game
-      const { data: existing } = await supabase
+      const { data: existing } = await admin
         .from('players').select('id').eq('game_id', gameId).ilike('nickname', nickname).single()
       if (existing) {
         results.push({ nickname, playerId: existing.id })
         continue
       }
-      const { data: player } = await supabase
+      const { data: player } = await admin
         .from('players')
         .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true, is_claimed: false })
         .select().single()
