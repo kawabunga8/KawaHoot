@@ -232,7 +232,6 @@ export default function GameHostPage() {
       body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
     })
     setImportingStudents(false)
-    setShowRosterPanel(false)
     setSelectedClassId(null)
     setAttendance({})
   }, [id, classes, selectedClassId, attendance])
