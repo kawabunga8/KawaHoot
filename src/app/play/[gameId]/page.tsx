@@ -43,6 +43,7 @@ export default function PlayPage() {
   const [followingReplay, setFollowingReplay] = useState(false)
   const [myTeam, setMyTeam] = useState<Team | null>(null)
   const [allTeams, setAllTeams] = useState<Team[]>([])
+  const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
 
   const teamScores = useMemo(() =>
     allTeams.map(t => ({
@@ -61,6 +62,19 @@ export default function PlayPage() {
   useEffect(() => {
     supabase.from('teams').select('*').eq('game_id', gameId)
       .then(({ data }) => setAllTeams(data || []))
+  }, [gameId, supabase])
+
+  // Poll unclaimed roster so player can identify themselves from the waiting screen
+  useEffect(() => {
+    function fetchRoster() {
+      supabase.from('players').select('id, nickname')
+        .eq('game_id', gameId).eq('is_pre_registered', true).eq('is_claimed', false)
+        .order('nickname')
+        .then(({ data }) => setRoster(data || []))
+    }
+    fetchRoster()
+    const poll = setInterval(fetchRoster, 3000)
+    return () => clearInterval(poll)
   }, [gameId, supabase])
 
   // Load player + team once; re-check team whenever player's team_id might change
@@ -303,6 +317,34 @@ export default function PlayPage() {
               <p className="text-white/40 text-sm mt-3 animate-pulse">⏳ Waiting for team assignment...</p>
             )}
           </div>
+          {/* Roster picker — shown if teacher has imported a class list and player hasn't identified yet */}
+          {roster.length > 0 && !player.real_name && (
+            <div className="mt-6 w-full max-w-xs">
+              <p className="text-white/60 text-sm font-bold uppercase tracking-widest mb-3">
+                Who are you?
+              </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {roster.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={async () => {
+                      await fetch('/api/game/identify-player', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ guestPlayerId: playerId, rosterPlayerId: r.id, realName: r.nickname }),
+                      })
+                      setPlayer(prev => prev ? { ...prev, nickname: r.nickname, real_name: r.nickname } : prev)
+                      setRoster(prev => prev.filter(x => x.id !== r.id))
+                    }}
+                    className="w-full text-left bg-white/10 hover:bg-kawaPurple/40 border border-white/20 hover:border-kawaPurple text-white font-bold px-4 py-3 rounded-xl transition-all"
+                  >
+                    {r.nickname}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex justify-center gap-1">
             {[0, 1, 2].map(i => (
               <div key={i} className="w-3 h-3 rounded-full bg-kawaPurple animate-bounce"
