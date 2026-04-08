@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     .from('games')
     .select('id, status, mode')
     .eq('pin', pin)
-    .in('status', ['waiting', 'question', 'answer_reveal', 'scores'])
+    .in('status', ['waiting', 'question', 'answer_reveal', 'leaderboard'])
     .single()
 
   if (!game) {

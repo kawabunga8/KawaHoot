@@ -194,7 +194,7 @@ export default function DisplayPage() {
       )}
 
       {/* SCORES: full-screen leaderboard */}
-      {game.status === 'scores' && (
+      {game.status === 'leaderboard' && (
         <div className="flex-1 flex items-center justify-center gap-6 px-8 py-6">
           {/* Team scores — only in teams mode */}
           {game.mode === 'teams' && teamScores.length > 0 && (
