@@ -318,7 +318,7 @@ export default function PlayPage() {
             )}
           </div>
           {/* Roster picker — shown if teacher has imported a class list and player hasn't identified yet */}
-          {roster.length > 0 && !player.real_name && (
+          {roster.length > 0 && (
             <div className="mt-6 w-full max-w-xs">
               <p className="text-white/60 text-sm font-bold uppercase tracking-widest mb-3">
                 Who are you?

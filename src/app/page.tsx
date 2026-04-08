@@ -12,6 +12,7 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
+  const [gameMode, setGameMode] = useState<'individual' | 'teams'>('individual')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; realName: string } | null>(null)
 
@@ -31,6 +32,7 @@ export default function HomePage() {
       return
     }
     setGameId(data.gameId)
+    setGameMode(data.mode || 'individual')
     const r = data.roster || []
     setRoster(r)
     setStep(r.length > 0 ? 'roster' : 'guest')
@@ -205,10 +207,22 @@ export default function HomePage() {
                 {roster.map(r => (
                   <button
                     key={r.id}
-                    onClick={() => {
-                      setSelectedPlayer({ id: r.id, realName: r.nickname })
-                      setNickname('')
-                      setStep('chosen')
+                    onClick={async () => {
+                      if (gameMode === 'teams') {
+                        // In teams mode, skip nickname step — join immediately with real name
+                        setLoading(true)
+                        await fetch('/api/game/claim-player', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ playerId: r.id, nickname: r.nickname, realName: r.nickname }),
+                        })
+                        setLoading(false)
+                        router.push(`/play/${gameId}?playerId=${r.id}`)
+                      } else {
+                        setSelectedPlayer({ id: r.id, realName: r.nickname })
+                        setNickname('')
+                        setStep('chosen')
+                      }
                     }}
                     className="bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple text-white font-bold py-3 px-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm truncate"
                     style={{ fontFamily: "'Fredoka One', cursive" }}

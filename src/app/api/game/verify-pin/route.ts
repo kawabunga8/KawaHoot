@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const supabase = createClient()
   const { data } = await supabase
     .from('games')
-    .select('id, status')
+    .select('id, status, mode')
     .eq('pin', pin)
     .in('status', ['waiting', 'question', 'answer_reveal', 'scores'])
     .single()
@@ -25,5 +25,5 @@ export async function GET(req: NextRequest) {
     .order('nickname')
   const roster = players || []
 
-  return NextResponse.json({ valid: true, gameId: data.id, roster })
+  return NextResponse.json({ valid: true, gameId: data.id, mode: data.mode, roster })
 }
