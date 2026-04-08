@@ -49,6 +49,11 @@ export default function GameHostPage() {
   const [attendance, setAttendance] = useState<Record<string, boolean>>({})
   const [importingStudents, setImportingStudents] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
+  // hasImported is true if we imported this session OR if the players list already has pre-registered entries
+  const preRegPlayers = players.filter(p => p.is_pre_registered)
+  const hasImported = importedCount > 0 || preRegPlayers.length > 0
+  const importTotal = importedCount || preRegPlayers.length
+  const importJoined = importTotal - preRegPlayers.filter(p => !p.is_claimed).length
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
@@ -705,35 +710,30 @@ export default function GameHostPage() {
                             )
                           })}
                         </div>
-                        {(() => {
-                          if (importedCount > 0) {
-                            const unclaimed = players.filter(p => p.is_pre_registered && !p.is_claimed).length
-                            const joined = importedCount - unclaimed
-                            const ratio = joined / importedCount
-                            const bg = ratio === 1 ? 'bg-kawaGreen' : ratio >= 0.5 ? 'bg-kawaYellow' : 'bg-kawaCoral'
-                            const fg = ratio >= 0.5 ? 'text-kawaDark' : 'text-white'
-                            return (
-                              <button
-                                onClick={importStudents}
-                                disabled={importingStudents}
-                                className={`w-full mt-3 ${bg} disabled:opacity-70 ${fg} font-bold py-3 rounded-xl transition-all`}
-                                style={{ fontFamily: "'Fredoka One', cursive" }}
-                              >
-                                {importingStudents ? 'Importing...' : `Imported ✓ — ${joined}/${importedCount} joined`}
-                              </button>
-                            )
-                          }
+                        {hasImported ? (() => {
+                          const ratio = importTotal > 0 ? importJoined / importTotal : 0
+                          const bg = ratio === 1 ? 'bg-kawaGreen' : ratio >= 0.5 ? 'bg-kawaYellow' : 'bg-kawaCoral'
+                          const fg = ratio >= 0.5 ? 'text-kawaDark' : 'text-white'
                           return (
                             <button
                               onClick={importStudents}
-                              disabled={importingStudents || presentCount === 0}
-                              className="w-full mt-3 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
+                              disabled={importingStudents}
+                              className={`w-full mt-3 ${bg} disabled:opacity-70 ${fg} font-bold py-3 rounded-xl transition-all`}
                               style={{ fontFamily: "'Fredoka One', cursive" }}
                             >
-                              {importingStudents ? 'Importing...' : `Import ${presentCount} Present Student${presentCount !== 1 ? 's' : ''}`}
+                              {importingStudents ? 'Importing...' : `Imported ✓ — ${importJoined}/${importTotal} joined`}
                             </button>
                           )
-                        })()}
+                        })() : (
+                          <button
+                            onClick={importStudents}
+                            disabled={importingStudents || presentCount === 0}
+                            className="w-full mt-3 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
+                            style={{ fontFamily: "'Fredoka One', cursive" }}
+                          >
+                            {importingStudents ? 'Importing...' : `Import ${presentCount} Present Student${presentCount !== 1 ? 's' : ''}`}
+                          </button>
+                        )}
                       </div>
                     )
                   })()}
