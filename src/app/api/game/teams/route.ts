@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       }
       const { data: player } = await supabase
         .from('players')
-        .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true })
+        .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true, is_claimed: false })
         .select().single()
       if (player) results.push({ nickname, playerId: player.id })
     }
