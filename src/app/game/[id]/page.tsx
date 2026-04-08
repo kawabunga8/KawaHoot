@@ -931,7 +931,7 @@ export default function GameHostPage() {
       )}
 
       {/* QUESTION PHASE */}
-      {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
+      {(game.status === 'question' || game.status === 'answer_reveal' || game.status === 'scores') && currentQuestion && (
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <span className="text-white/50 text-sm">{players.length} players</span>
@@ -972,14 +972,14 @@ export default function GameHostPage() {
               return (
                 <div key={opt}
                   className={`${color.bg} ${color.text} rounded-xl p-3 relative overflow-hidden
-                    ${game.status === 'answer_reveal' && isCorrect ? 'ring-4 ring-white' : ''}
-                    ${game.status === 'answer_reveal' && !isCorrect ? 'opacity-50' : ''}`}>
+                    ${(game.status === 'answer_reveal' || game.status === 'scores') && isCorrect ? 'ring-4 ring-white' : ''}
+                    ${(game.status === 'answer_reveal' || game.status === 'scores') && !isCorrect ? 'opacity-50' : ''}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{color.shape}</span>
                     <span className="font-bold truncate">
                       {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
                     </span>
-                    {game.status === 'answer_reveal' && isCorrect && <span className="ml-auto text-xl">✓</span>}
+                    {(game.status === 'answer_reveal' || game.status === 'scores') && isCorrect && <span className="ml-auto text-xl">✓</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-black/20 rounded-full">
@@ -991,6 +991,36 @@ export default function GameHostPage() {
               )
             })}
           </div>
+
+          {game.status === 'scores' && game.mode === 'teams' && teamScores.length > 0 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
+              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Team Scores</h3>
+              <div className="space-y-2">
+                {teamScores.map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-3">
+                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
+                    <span className="flex-1 text-white font-semibold">{t.name}</span>
+                    <span className="text-kawaYellow font-bold">{t.score.toLocaleString()} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {game.status === 'scores' && game.mode !== 'teams' && leaderboard.length > 0 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
+              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Top Players</h3>
+              <div className="space-y-2">
+                {leaderboard.slice(0, 5).map((entry, i) => (
+                  <div key={entry.player_id} className="flex items-center gap-3">
+                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]}</span>
+                    <span className="flex-1 text-white font-semibold">{entry.nickname}</span>
+                    <span className="text-kawaYellow font-bold">{entry.score.toLocaleString()} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3">
             {game.status === 'question' && (
@@ -1007,44 +1037,7 @@ export default function GameHostPage() {
                 {loading ? '...' : 'Show Scores →'}
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* SCORES PHASE */}
-      {game.status === 'scores' && (
-        <div className="max-w-3xl mx-auto">
-          {game.mode === 'teams' && teamScores.length > 0 ? (
-            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
-              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Team Scores</h3>
-              <div className="space-y-2">
-                {teamScores.map((t, i) => (
-                  <div key={t.id} className="flex items-center gap-3">
-                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
-                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
-                    <span className="flex-1 text-white font-semibold">{t.name}</span>
-                    <span className="text-kawaYellow font-bold">{t.score.toLocaleString()} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : leaderboard.length > 0 ? (
-            <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
-              <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Top Players</h3>
-              <div className="space-y-2">
-                {leaderboard.slice(0, 5).map((entry, i) => (
-                  <div key={entry.player_id} className="flex items-center gap-3">
-                    <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]}</span>
-                    <span className="flex-1 text-white font-semibold">{entry.nickname}</span>
-                    <span className="text-kawaYellow font-bold">{entry.score.toLocaleString()} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex gap-3">
-            {!isLast ? (
+            {game.status === 'scores' && !isLast ? (
               <>
                 <button onClick={nextQuestion} disabled={loading}
                   className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
@@ -1069,7 +1062,7 @@ export default function GameHostPage() {
                   {restarting ? '...' : '↺'}
                 </button>
               </>
-            ) : (
+            ) : game.status === 'scores' ? (
               <>
                 <button onClick={endGame} disabled={loading}
                   className="flex-1 bg-kawaYellow hover:bg-yellow-400 disabled:opacity-50 text-kawaDark font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
@@ -1083,7 +1076,7 @@ export default function GameHostPage() {
                   {restarting ? '...' : '↺'}
                 </button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       )}
