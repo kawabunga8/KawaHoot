@@ -8,11 +8,12 @@ export default function HomePage() {
   const router = useRouter()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'roster' | 'guest'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'nickname' | 'guest'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
+  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; nickname: string } | null>(null)
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -146,16 +147,10 @@ export default function HomePage() {
                 {roster.map(r => (
                   <button
                     key={r.id}
-                    onClick={async () => {
-                      // Always join immediately when selecting from roster — no nickname step needed
-                      setLoading(true)
-                      await fetch('/api/game/claim-player', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ playerId: r.id, nickname: r.nickname, realName: r.nickname }),
-                      })
-                      setLoading(false)
-                      router.push(`/play/${gameId}?playerId=${r.id}`)
+                    onClick={() => {
+                      setSelectedPlayer(r)
+                      setNickname(r.nickname)
+                      setStep('nickname')
                     }}
                     className="bg-kawaPurple/40 border border-kawaPurple hover:bg-kawaPurple text-white font-bold py-3 px-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm truncate"
                     style={{ fontFamily: "'Fredoka One', cursive" }}
@@ -175,6 +170,52 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
+          ) : step === 'nickname' && selectedPlayer ? (
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setError('')
+              if (!nickname.trim()) { setError('Enter a nickname!'); return }
+              setLoading(true)
+              await fetch('/api/game/claim-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerId: selectedPlayer.id, nickname: nickname.trim(), realName: selectedPlayer.nickname }),
+              })
+              setLoading(false)
+              router.push(`/play/${gameId}?playerId=${selectedPlayer.id}`)
+            }} className="space-y-5">
+              <button
+                type="button"
+                onClick={() => setStep('roster')}
+                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors"
+              >
+                ← Back to class list
+              </button>
+              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                Choose Your Nickname
+              </h2>
+              <p className="text-white/50 text-sm text-center -mt-2">
+                Playing as <span className="text-kawaYellow font-bold">{selectedPlayer.nickname}</span>
+              </p>
+              <input
+                type="text"
+                maxLength={20}
+                value={nickname}
+                onChange={e => setNickname(e.target.value)}
+                placeholder="e.g. QuizWizard99"
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
+              />
+              {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                {loading ? 'Joining...' : "Let's Go! 🚀"}
+              </button>
+            </form>
           ) : (
             <form onSubmit={handleJoin} className="space-y-5">
               <button
@@ -184,10 +225,7 @@ export default function HomePage() {
               >
                 ← {roster.length > 0 ? 'Back to class list' : `PIN: ${pin}`}
               </button>
-              <h2
-                className="text-2xl font-bold text-center text-white"
-                style={{ fontFamily: "'Fredoka One', cursive" }}
-              >
+              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {roster.length > 0 ? 'Join as Guest' : 'Choose Your Nickname'}
               </h2>
               {roster.length > 0 && (
@@ -204,9 +242,7 @@ export default function HomePage() {
                 autoFocus
                 className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
               />
-              {error && (
-                <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>
-              )}
+              {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
               <button
                 type="submit"
                 disabled={loading}
