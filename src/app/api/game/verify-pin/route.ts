@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     .select('id, nickname')
     .eq('game_id', data.id)
     .eq('is_pre_registered', true)
-    .neq('is_claimed', true)
+    .or('is_claimed.eq.false,is_claimed.is.null')
     .order('nickname')
   const roster = players || []
 

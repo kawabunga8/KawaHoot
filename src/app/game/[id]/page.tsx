@@ -52,8 +52,9 @@ export default function GameHostPage() {
   // hasImported is true if we imported this session OR if the players list already has pre-registered entries
   const preRegPlayers = players.filter(p => p.is_pre_registered)
   const hasImported = importedCount > 0 || preRegPlayers.length > 0
-  const importTotal = importedCount || preRegPlayers.length
-  const importJoined = importTotal - preRegPlayers.filter(p => !p.is_claimed).length
+  // Use preRegPlayers for counts only when players state has loaded (avoids race condition)
+  const importTotal = preRegPlayers.length > 0 ? Math.max(importedCount, preRegPlayers.length) : importedCount
+  const importJoined = preRegPlayers.filter(p => p.is_claimed).length
 
   const questionsRef = useRef<QuizQuestion[]>([])
   questionsRef.current = questions
