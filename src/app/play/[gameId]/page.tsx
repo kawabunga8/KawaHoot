@@ -493,34 +493,24 @@ export default function PlayPage() {
             })}
           </div>
 
-          {/* Rank */}
-          {game.mode === 'teams' && myTeam ? (
-            (() => {
-              const teamRank = teamScores.findIndex(t => t.id === myTeam.id) + 1
-              const myTeamScore = teamScores.find(t => t.id === myTeam.id)
-              return teamRank > 0 ? (
-                <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3">
-                  <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>#{teamRank}</p>
-                  <div className="flex-1">
-                    <p className="text-white font-semibold text-sm">Team Rank</p>
-                    <p className="text-white/50 text-xs">{myTeamScore?.score.toLocaleString()} pts total</p>
+          {/* Top Players */}
+          {leaderboard.length > 0 && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-4">
+              <h3 className="text-white font-bold mb-3 text-xs uppercase tracking-widest">Top Players</h3>
+              <div className="space-y-2">
+                {leaderboard.slice(0, 5).map((p, i) => (
+                  <div key={p.id}
+                    className={`flex items-center gap-2 p-2 rounded-xl ${p.id === playerId ? 'bg-kawaPurple/30 border border-kawaPurple' : ''}`}>
+                    <span className="text-base w-6">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]}</span>
+                    <span className={`flex-1 text-left text-sm font-semibold ${p.id === playerId ? 'text-kawaYellow' : 'text-white'}`}>
+                      {p.nickname}
+                    </span>
+                    <span className="text-white/70 text-sm font-bold">{p.score.toLocaleString()}</span>
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 font-bold text-xs text-white"
-                    style={{ backgroundColor: TEAM_COLOR_HEX[myTeam.color] ?? myTeam.color }}>
-                    👥 {myTeam.name}
-                  </span>
-                </div>
-              ) : null
-            })()
-          ) : myRank ? (
-            <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3">
-              <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>#{myRank}</p>
-              <div className="flex-1">
-                <p className="text-white font-semibold text-sm">Your Rank</p>
-                <p className="text-white/50 text-xs">{player.score.toLocaleString()} pts total</p>
+                ))}
               </div>
             </div>
-          ) : null}
+          )}
 
           {/* Leaderboard */}
           {game.mode === 'teams' && teamScores.length > 0 ? (
