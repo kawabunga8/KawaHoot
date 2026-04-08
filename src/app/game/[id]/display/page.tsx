@@ -189,7 +189,7 @@ export default function DisplayPage() {
       )}
 
       {/* SCORES: full-screen leaderboard, question hidden */}
-      {game.status === 'scores' && currentQuestion && (
+      {game.status === 'scores' && (
         <div className="flex-1 flex items-center justify-center px-8 py-6">
           <div className="w-full max-w-lg bg-white/10 border border-white/20 rounded-3xl p-8">
                 {game.mode === 'teams' && teamScores.length > 0 ? (
