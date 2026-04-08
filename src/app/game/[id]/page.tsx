@@ -212,6 +212,15 @@ export default function GameHostPage() {
     kawaCoral: 'bg-kawaCoral',
   }
 
+  const TEAM_COLOR_HEX: Record<string, string> = {
+    kawared: '#EF4444',
+    kawaBlue: '#3B82F6',
+    kawaYellow: '#F59E0B',
+    kawaGreen: '#22C55E',
+    kawaPurple: '#7C3AED',
+    kawaCoral: '#F97316',
+  }
+
   const importStudents = useCallback(async () => {
     const cls = classes.find(c => c.id === selectedClassId)
     if (!cls) return
@@ -719,28 +728,38 @@ export default function GameHostPage() {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto">
-                  {preReg.map(p => (
-                    <div key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${p.is_claimed ? 'bg-kawaGreen/20 border border-kawaGreen/40' : 'bg-white/5 border border-white/10'}`}>
-                      <span className={`flex-shrink-0 ${p.is_claimed ? 'text-kawaGreen' : 'text-white/25'}`}>
-                        {p.is_claimed ? '✓' : '○'}
-                      </span>
-                      <span className={`flex-1 font-bold truncate ${p.is_claimed ? 'text-white' : 'text-white/50'}`}>
-                        {p.real_name || p.nickname}
-                        {p.is_claimed && p.nickname !== (p.real_name || p.nickname) && (
-                          <span className="text-white/40 font-normal"> → {p.nickname}</span>
+                  {preReg.map(p => {
+                    const playerTeam = game.mode === 'teams' ? teams.find(t => t.id === p.team_id) : null
+                    return (
+                      <div key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${p.is_claimed ? 'bg-kawaGreen/20 border border-kawaGreen/40' : 'bg-white/5 border border-white/10'}`}>
+                        <span className={`flex-shrink-0 ${p.is_claimed ? 'text-kawaGreen' : 'text-white/25'}`}>
+                          {p.is_claimed ? '✓' : '○'}
+                        </span>
+                        <span className={`flex-1 font-bold truncate ${p.is_claimed ? 'text-white' : 'text-white/50'}`}>
+                          {p.real_name || p.nickname}
+                          {p.is_claimed && p.nickname !== (p.real_name || p.nickname) && (
+                            <span className="text-white/40 font-normal"> → {p.nickname}</span>
+                          )}
+                        </span>
+                        {playerTeam && (
+                          <span
+                            className="flex-shrink-0 w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: TEAM_COLOR_HEX[playerTeam.color] ?? playerTeam.color }}
+                            title={playerTeam.name}
+                          />
                         )}
-                      </span>
-                      {!p.is_claimed && (
-                        <button
-                          onClick={() => markAbsent(p.id)}
-                          className="flex-shrink-0 text-white/25 hover:text-kawared text-xs font-bold transition-colors"
-                          title="Mark absent"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                        {!p.is_claimed && (
+                          <button
+                            onClick={() => markAbsent(p.id)}
+                            className="flex-shrink-0 text-white/25 hover:text-kawared text-xs font-bold transition-colors"
+                            title="Mark absent"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
                 {unclaimed.length > 0 && (
                   <p className="text-white/40 text-xs mt-2 text-center">
@@ -940,7 +959,7 @@ export default function GameHostPage() {
                 {teamScores.map((t, i) => (
                   <div key={t.id} className="flex items-center gap-3">
                     <span className="text-2xl">{['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] ?? `${i + 1}`}</span>
-                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
                     <span className="flex-1 text-white font-semibold">{t.name}</span>
                     <span className="text-kawaYellow font-bold">{t.score.toLocaleString()} pts</span>
                   </div>
