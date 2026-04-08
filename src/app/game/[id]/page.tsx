@@ -241,6 +241,7 @@ export default function GameHostPage() {
     })
     const data = await res.json()
     if (data.players?.length) setImportedCount(data.players.length)
+    if (!data.success && data.error) alert(`Import failed: ${data.error}`)
     setImportingStudents(false)
   }, [id, classes, selectedClassId, attendance])
 

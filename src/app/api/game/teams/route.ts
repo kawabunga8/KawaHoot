@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const { names } = body as { names: string[] }
     const results: { nickname: string; playerId: string }[] = []
+    const errors: string[] = []
     for (const nickname of names) {
       // Skip if already exists in this game
       const { data: existing } = await admin
@@ -62,11 +63,15 @@ export async function POST(req: NextRequest) {
         results.push({ nickname, playerId: existing.id })
         continue
       }
-      const { data: player } = await admin
+      const { data: player, error: insertError } = await admin
         .from('players')
         .insert({ game_id: gameId, nickname, real_name: nickname, score: 0, is_pre_registered: true, is_claimed: false })
         .select().single()
+      if (insertError) errors.push(`${nickname}: ${insertError.message}`)
       if (player) results.push({ nickname, playerId: player.id })
+    }
+    if (errors.length > 0) {
+      return NextResponse.json({ success: false, error: errors[0], errors, players: results }, { status: 500 })
     }
     return NextResponse.json({ success: true, players: results })
   }
