@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: NextRequest) {
   const pin = req.nextUrl.searchParams.get('pin')
@@ -15,13 +16,14 @@ export async function GET(req: NextRequest) {
 
   if (!data) return NextResponse.json({ valid: false })
 
-  // Return pre-registered roster for any active game status (including late joiners)
-  const { data: players } = await supabase
+  // Use admin client to bypass any RLS when reading pre-registered players
+  const admin = createAdminClient()
+  const { data: players } = await admin
     .from('players')
     .select('id, nickname')
     .eq('game_id', data.id)
     .eq('is_pre_registered', true)
-    .or('is_claimed.eq.false,is_claimed.is.null')
+    .eq('is_claimed', false)
     .order('nickname')
   const roster = players || []
 
