@@ -117,7 +117,7 @@ export default function PlayPage() {
       }
     }
 
-    if (g.status === 'answer_reveal' || g.status === 'finished') {
+    if (g.status === 'answer_reveal' || g.status === 'scores' || g.status === 'finished') {
       // Fetch leaderboard + refresh teams (teams may not have loaded on mount)
       const [{ data: players }, { data: teams }] = await Promise.all([
         supabase.from('players').select('*').eq('game_id', gameId).order('score', { ascending: false }),
@@ -380,7 +380,7 @@ export default function PlayPage() {
   }
 
   // ANSWER REVEAL
-  if (game.status === 'answer_reveal' && currentQuestion) {
+  if ((game.status === 'answer_reveal' || game.status === 'scores') && currentQuestion) {
     const optionLabels: Record<string, string> = {
       A: currentQuestion.option_a,
       B: currentQuestion.option_b,

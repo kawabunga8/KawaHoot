@@ -188,8 +188,8 @@ export default function DisplayPage() {
         </div>
       )}
 
-      {/* QUESTION / ANSWER REVEAL */}
-      {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
+      {/* QUESTION / ANSWER REVEAL / SCORES */}
+      {(game.status === 'question' || game.status === 'answer_reveal' || game.status === 'scores') && currentQuestion && (
         <div className="flex-1 flex flex-col px-8 py-6">
           {/* Timer bar + meta row */}
           <div className="flex items-center gap-4 mb-3">
@@ -221,81 +221,68 @@ export default function DisplayPage() {
             </p>
           </div>
 
-          {game.status === 'question' ? (
-            /* QUESTION: full-size answer grid */
-            <div className="grid grid-cols-2 gap-4 flex-1">
-              {(['A', 'B', 'C', 'D'] as const).map(opt => {
-                const color = ANSWER_COLORS[opt]
-                return (
-                  <div key={opt} className={`${color.bg} ${color.text} rounded-2xl p-6 flex items-center gap-3`}>
-                    <span className="text-3xl flex-shrink-0">{color.shape}</span>
-                    <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            /* ANSWER REVEAL: compact answers left, leaderboard right */
-            <div className="flex gap-6 flex-1 min-h-0">
-              <div className="grid grid-cols-2 gap-3 flex-1 content-start">
-                {(['A', 'B', 'C', 'D'] as const).map(opt => {
-                  const color = ANSWER_COLORS[opt]
-                  const isCorrect = currentQuestion.correct_answer === opt
-                  return (
-                    <div
-                      key={opt}
-                      className={`${color.bg} ${color.text} rounded-2xl p-4 flex items-center gap-3
-                        ${isCorrect ? 'ring-4 ring-white scale-105' : 'opacity-40'}`}
-                      style={{ transition: 'all 0.3s' }}
-                    >
-                      <span className="text-2xl flex-shrink-0">{color.shape}</span>
-                      <span className="font-bold text-xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
-                        {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
-                      </span>
-                      {isCorrect && <span className="text-3xl flex-shrink-0">✓</span>}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Scores panel */}
-              <div className="w-80 flex-shrink-0 bg-white/10 border border-white/20 rounded-3xl p-5 overflow-y-auto">
+          {game.status === 'scores' ? (
+            /* SCORES: full-screen leaderboard, no answers */
+            <div className="flex-1 flex items-center justify-center">
+              <div className="w-full max-w-lg bg-white/10 border border-white/20 rounded-3xl p-8">
                 {game.mode === 'teams' && teamScores.length > 0 ? (
                   <>
-                    <h3 className="text-white font-bold text-center text-lg mb-4 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
                       Team Scores
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {teamScores.map((t, i) => (
-                        <div key={t.id} className="flex items-center gap-3 p-3 rounded-2xl"
+                        <div key={t.id} className="flex items-center gap-4 p-4 rounded-2xl"
                           style={{ backgroundColor: (TEAM_COLOR_HEX[t.color] ?? t.color) + '30' }}>
-                          <span className="text-2xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
-                          <span className="flex-1 text-white font-bold truncate">{t.name}</span>
-                          <span className="text-kawaYellow font-bold">{t.score.toLocaleString()}</span>
+                          <span className="text-3xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
+                          <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: TEAM_COLOR_HEX[t.color] ?? t.color }} />
+                          <span className="flex-1 text-white font-bold text-xl truncate">{t.name}</span>
+                          <span className="text-kawaYellow font-bold text-xl">{t.score.toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
                   </>
                 ) : (
                   <>
-                    <h3 className="text-white font-bold text-center text-lg mb-4 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    <h3 className="text-white font-bold text-center text-2xl mb-6 uppercase tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
                       Top Players
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {players.slice(0, 5).map((p, i) => (
-                        <div key={p.id} className="flex items-center gap-3 p-3 rounded-2xl bg-white/10">
-                          <span className="text-2xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
-                          <span className="flex-1 text-white font-bold truncate">{p.nickname}</span>
-                          <span className="text-kawaYellow font-bold">{p.score.toLocaleString()}</span>
+                        <div key={p.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/10">
+                          <span className="text-3xl">{['🥇', '🥈', '🥉', '4', '5'][i] ?? `${i + 1}`}</span>
+                          <span className="flex-1 text-white font-bold text-xl truncate">{p.nickname}</span>
+                          <span className="text-kawaYellow font-bold text-xl">{p.score.toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
                   </>
                 )}
               </div>
+            </div>
+          ) : (
+            /* QUESTION / ANSWER REVEAL: full-size answer grid */
+            <div className="grid grid-cols-2 gap-4 flex-1">
+              {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                const color = ANSWER_COLORS[opt]
+                const isCorrect = currentQuestion.correct_answer === opt
+                const revealed = game.status === 'answer_reveal'
+                return (
+                  <div
+                    key={opt}
+                    className={`${color.bg} ${color.text} rounded-2xl p-6 flex items-center gap-3
+                      ${revealed && isCorrect ? 'ring-8 ring-white scale-105' : ''}
+                      ${revealed && !isCorrect ? 'opacity-40' : ''}`}
+                    style={{ transition: 'all 0.3s' }}
+                  >
+                    <span className="text-3xl flex-shrink-0">{color.shape}</span>
+                    <span className="font-bold text-2xl md:text-3xl leading-tight flex-1" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                      {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
+                    </span>
+                    {revealed && isCorrect && <span className="text-4xl flex-shrink-0">✓</span>}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

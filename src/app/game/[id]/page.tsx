@@ -321,8 +321,17 @@ export default function GameHostPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
-    // Optimistic local update so UI doesn't wait for realtime/poll
     setGame(prev => prev ? { ...prev, status: 'answer_reveal' } : prev)
+    setLoading(false)
+  }, [id])
+
+  const showScores = useCallback(async () => {
+    setLoading(true)
+    await fetch('/api/game/show-scores', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: id }),
+    })
+    setGame(prev => prev ? { ...prev, status: 'scores' } : prev)
     const { data } = await supabase
       .from('players').select('*').eq('game_id', id).order('score', { ascending: false }).limit(10)
     setLeaderboard((data || []).map((p, i) => ({ player_id: p.id, nickname: p.nickname, score: p.score, rank: i + 1 })))
@@ -891,7 +900,7 @@ export default function GameHostPage() {
       )}
 
       {/* QUESTION PHASE */}
-      {(game.status === 'question' || game.status === 'answer_reveal') && currentQuestion && (
+      {(game.status === 'question' || game.status === 'answer_reveal' || game.status === 'scores') && currentQuestion && (
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <span className="text-white/50 text-sm">{players.length} players</span>
@@ -932,14 +941,14 @@ export default function GameHostPage() {
               return (
                 <div key={opt}
                   className={`${color.bg} ${color.text} rounded-xl p-3 relative overflow-hidden
-                    ${game.status === 'answer_reveal' && isCorrect ? 'ring-4 ring-white' : ''}
-                    ${game.status === 'answer_reveal' && !isCorrect ? 'opacity-50' : ''}`}>
+                    ${(game.status === 'answer_reveal' || game.status === 'scores') && isCorrect ? 'ring-4 ring-white' : ''}
+                    ${(game.status === 'answer_reveal' || game.status === 'scores') && !isCorrect ? 'opacity-50' : ''}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{color.shape}</span>
                     <span className="font-bold truncate">
                       {currentQuestion[`option_${opt.toLowerCase()}` as 'option_a' | 'option_b' | 'option_c' | 'option_d']}
                     </span>
-                    {game.status === 'answer_reveal' && isCorrect && <span className="ml-auto text-xl">✓</span>}
+                    {(game.status === 'answer_reveal' || game.status === 'scores') && isCorrect && <span className="ml-auto text-xl">✓</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-black/20 rounded-full">
@@ -952,7 +961,7 @@ export default function GameHostPage() {
             })}
           </div>
 
-          {game.status === 'answer_reveal' && game.mode === 'teams' && teamScores.length > 0 && (
+          {game.status === 'scores' && game.mode === 'teams' && teamScores.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
               <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Team Scores</h3>
               <div className="space-y-2">
@@ -967,7 +976,7 @@ export default function GameHostPage() {
               </div>
             </div>
           )}
-          {game.status === 'answer_reveal' && game.mode !== 'teams' && leaderboard.length > 0 && (
+          {game.status === 'scores' && game.mode !== 'teams' && leaderboard.length > 0 && (
             <div className="bg-white/10 border border-white/20 rounded-2xl p-4 mb-4">
               <h3 className="text-white font-bold mb-3 text-center" style={{ fontFamily: "'Fredoka One', cursive" }}>Top Players</h3>
               <div className="space-y-2">
@@ -987,10 +996,17 @@ export default function GameHostPage() {
               <button onClick={revealAnswer} disabled={loading}
                 className="flex-1 bg-kawaCoral hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {loading ? '...' : 'Show Scores →'}
+                {loading ? '...' : 'Reveal Answer →'}
               </button>
             )}
             {game.status === 'answer_reveal' && (
+              <button onClick={showScores} disabled={loading}
+                className="flex-1 bg-kawaPurple hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {loading ? '...' : 'Show Scores →'}
+              </button>
+            )}
+            {game.status === 'scores' && (
               !isLast ? (
                 <>
                   <button onClick={nextQuestion} disabled={loading}

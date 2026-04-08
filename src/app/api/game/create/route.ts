@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     option_c: q.option_c,
     option_d: q.option_d,
     correct_answer: q.correct_answer.toUpperCase(),
-    time_limit: parseInt(q.time_limit || '30') || 30,
+    time_limit: parseInt(q.time_limit || '60') || 60,
     order_index: i,
   }))
 

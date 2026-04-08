@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     .from('games')
     .select('id, status')
     .eq('pin', pin)
-    .in('status', ['waiting', 'question', 'answer_reveal'])
+    .in('status', ['waiting', 'question', 'answer_reveal', 'scores'])
     .single()
 
   if (!data) return NextResponse.json({ valid: false })
