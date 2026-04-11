@@ -331,7 +331,7 @@ export default function PlayPage() {
                       await fetch('/api/game/identify-player', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ guestPlayerId: playerId, rosterPlayerId: r.id, realName: r.nickname }),
+                        body: JSON.stringify({ gameId, guestPlayerId: playerId, rosterPlayerId: r.id, realName: r.nickname }),
                       })
                       setPlayer(prev => prev ? { ...prev, nickname: r.nickname, real_name: r.nickname } : prev)
                       setRoster(prev => prev.filter(x => x.id !== r.id))

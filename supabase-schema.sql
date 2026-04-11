@@ -14,7 +14,6 @@ create table if not exists games (
   next_game_id uuid,  -- set when host replays; players follow to this game
   created_at timestamptz default now()
 );
-
 -- Quiz questions table
 create table if not exists quiz_questions (
   id uuid default gen_random_uuid() primary key,
@@ -25,7 +24,7 @@ create table if not exists quiz_questions (
   option_c text not null,
   option_d text not null,
   correct_answer char(1) not null check (correct_answer in ('A','B','C','D')),
-  time_limit integer not null default 30,
+  time_limit integer not null default 20,
   order_index integer not null,
   created_at timestamptz default now()
 );

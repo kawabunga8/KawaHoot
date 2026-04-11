@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireHost } from '@/lib/require-host'
 
 export async function POST(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const { gameId, targetIndex } = await req.json()
   const supabase = createClient()
 
@@ -19,8 +23,12 @@ export async function POST(req: NextRequest) {
     .eq('game_id', gameId)
     .order('order_index')
 
-  // targetIndex can be passed explicitly (e.g. random jump); otherwise increment
   const nextIndex = targetIndex !== undefined ? targetIndex : game.current_question_index + 1
+
+  // Prevent jumping backwards
+  if (nextIndex <= game.current_question_index) {
+    return NextResponse.json({ success: false, error: 'Invalid question index' }, { status: 400 })
+  }
 
   const nextQuestion = questions?.[nextIndex]
   if (!nextQuestion) {

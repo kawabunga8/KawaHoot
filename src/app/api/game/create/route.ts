@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generatePin } from '@/lib/game-utils'
+import { requireHost } from '@/lib/require-host'
 import type { CSVRow } from '@/types'
 
 export async function POST(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const { title, questions } = await req.json() as { title: string; questions: CSVRow[] }
 
   if (!title || !questions?.length) {

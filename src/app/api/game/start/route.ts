@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireHost } from '@/lib/require-host'
 
 export async function POST(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const { gameId } = await req.json()
   const supabase = createClient()
 

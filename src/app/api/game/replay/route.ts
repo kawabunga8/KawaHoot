@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generatePin } from '@/lib/game-utils'
+import { requireHost } from '@/lib/require-host'
 
 /** Shuffle the 4 options of a question, updating correct_answer to match */
 function shuffleOptions(q: {
@@ -34,6 +35,9 @@ function shuffleOptions(q: {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const { gameId } = await req.json()
   const supabase = createClient()
 
@@ -84,7 +88,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Copy players (scores reset to 0), preserving team assignments via teamMap
+  // Copy players (scores reset to 0), preserving team assignments and pre-registration state
   const playerMap: Record<string, string> = {}
   if (oldPlayers?.length) {
     const { data: newPlayers } = await supabase
@@ -94,6 +98,8 @@ export async function POST(req: NextRequest) {
         nickname: p.nickname,
         score: 0,
         team_id: p.team_id ? (teamMap[p.team_id] ?? null) : null,
+        is_pre_registered: p.is_pre_registered ?? false,
+        is_claimed: false, // reset claims for the new game
       })))
       .select()
     newPlayers?.forEach((np, i) => {

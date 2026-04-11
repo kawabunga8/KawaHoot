@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireHost } from '@/lib/require-host'
 
-/** POST /api/game/pause
- *  body: { gameId, action: 'pause' | 'resume' }
- *  pause: sets status to 'paused'
- *  resume: sets status back to 'answer_reveal'
- */
 export async function POST(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const { gameId, action } = await req.json()
   const supabase = createClient()
 

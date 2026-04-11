@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { hostFetch } from '@/lib/host-fetch'
 import HostGate from '@/components/HostGate'
 import type { Game, Player, QuizQuestion, LeaderboardEntry, Team, KawaClass } from '@/types'
 
@@ -191,7 +192,7 @@ export default function GameHostPage() {
         clearInterval(tick)
         if (!autoRevealedRef.current) {
           autoRevealedRef.current = true
-          fetch('/api/game/reveal', {
+          hostFetch('/api/game/reveal', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gameId: id }),
           })
@@ -235,7 +236,7 @@ export default function GameHostPage() {
     if (!present.length) return
     setImportingStudents(true)
     setImportedCount(present.length) // set immediately so button changes right away
-    const res = await fetch('/api/game/teams', {
+    const res = await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
     })
@@ -247,14 +248,14 @@ export default function GameHostPage() {
 
   const markAbsent = useCallback(async (playerId: string) => {
     setPlayers(prev => prev.filter(p => p.id !== playerId))
-    await fetch('/api/game/teams', {
+    await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'remove_player', playerId }),
     })
   }, [id])
 
   const autoAssignTeams = useCallback(async () => {
-    const res = await fetch('/api/game/teams', {
+    const res = await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'auto_assign' }),
     })
@@ -269,7 +270,7 @@ export default function GameHostPage() {
 
   const setMode = useCallback(async (mode: 'individual' | 'teams') => {
     setGame(prev => prev ? { ...prev, mode } : prev)
-    await fetch('/api/game/teams', {
+    await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'set_mode', mode }),
     })
@@ -281,7 +282,7 @@ export default function GameHostPage() {
   const addTeam = useCallback(async () => {
     const used = teams.map(t => t.name)
     const preset = TEAM_PRESETS.find(p => !used.includes(p.name)) || { name: `Team ${teams.length + 1}`, color: 'kawaPurple' }
-    const res = await fetch('/api/game/teams', {
+    const res = await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'create', name: preset.name, color: preset.color }),
     })
@@ -293,7 +294,7 @@ export default function GameHostPage() {
   const deleteTeam = useCallback(async (teamId: string) => {
     setTeams(prev => prev.filter(t => t.id !== teamId))
     setPlayers(prev => prev.map(p => p.team_id === teamId ? { ...p, team_id: null } : p))
-    await fetch('/api/game/teams', {
+    await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'delete', teamId }),
     })
@@ -302,7 +303,7 @@ export default function GameHostPage() {
   const assignPlayer = useCallback(async (playerId: string, teamId: string | null) => {
     setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, team_id: teamId } : p))
     setAssigningPlayer(null)
-    await fetch('/api/game/teams', {
+    await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'assign', playerId, teamId }),
     })
@@ -310,7 +311,7 @@ export default function GameHostPage() {
 
   const startGame = useCallback(async () => {
     setLoading(true)
-    await fetch('/api/game/start', {
+    await hostFetch('/api/game/start', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -325,7 +326,7 @@ export default function GameHostPage() {
 
   const revealAnswer = useCallback(async () => {
     setLoading(true)
-    await fetch('/api/game/reveal', {
+    await hostFetch('/api/game/reveal', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -335,7 +336,7 @@ export default function GameHostPage() {
 
   const showScores = useCallback(async () => {
     setLoading(true)
-    await fetch('/api/game/show-scores', {
+    await hostFetch('/api/game/show-scores', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -348,7 +349,7 @@ export default function GameHostPage() {
 
   const nextQuestion = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/game/next-question', {
+    const res = await hostFetch('/api/game/next-question', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -370,7 +371,7 @@ export default function GameHostPage() {
       .filter(i => i > played)
     if (!remaining.length) return setLoading(false)
     const targetIndex = remaining[Math.floor(Math.random() * remaining.length)]
-    const res = await fetch('/api/game/next-question', {
+    const res = await hostFetch('/api/game/next-question', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, targetIndex }),
     })
@@ -386,7 +387,7 @@ export default function GameHostPage() {
   const replayGame = useCallback(async (sourceId?: string) => {
     setReplaying(true)
     const targetId = sourceId || id
-    const res = await fetch('/api/game/replay', {
+    const res = await hostFetch('/api/game/replay', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: targetId }),
     })
@@ -407,7 +408,7 @@ export default function GameHostPage() {
 
   const restartGame = useCallback(async () => {
     setRestarting(true)
-    await fetch('/api/game/restart', {
+    await hostFetch('/api/game/restart', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -421,7 +422,7 @@ export default function GameHostPage() {
 
   const endGame = useCallback(async () => {
     setLoading(true)
-    await fetch('/api/game/end', {
+    await hostFetch('/api/game/end', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
@@ -431,7 +432,7 @@ export default function GameHostPage() {
 
   const pauseGame = useCallback(async () => {
     setGame(prev => prev ? { ...prev, status: 'paused' } : prev)
-    await fetch('/api/game/pause', {
+    await hostFetch('/api/game/pause', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'pause' }),
     })
@@ -440,7 +441,7 @@ export default function GameHostPage() {
   const resumeGame = useCallback(async () => {
     setGame(prev => prev ? { ...prev, status: 'answer_reveal' } : prev)
     setAssigningPlayer(null)
-    await fetch('/api/game/pause', {
+    await hostFetch('/api/game/pause', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id, action: 'resume' }),
     })
@@ -572,6 +573,9 @@ export default function GameHostPage() {
                   <tr className="border-b border-white/10">
                     <th className="text-left px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Real Name</th>
                     <th className="text-left px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Game Name</th>
+                    {game.mode === 'teams' && (
+                      <th className="text-left px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Team</th>
+                    )}
                     <th className="text-right px-4 py-2 text-white/40 font-bold uppercase tracking-wider text-xs">Score</th>
                     {currentQuestion && (
                       <>
@@ -588,6 +592,11 @@ export default function GameHostPage() {
                       <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
                         <td className="px-4 py-2 text-white/70">{p.real_name || <span className="text-white/25 italic">guest</span>}</td>
                         <td className="px-4 py-2 text-white font-bold">{p.nickname}</td>
+                        {game.mode === 'teams' && (
+                          <td className="px-4 py-2 text-white/70">
+                            {teams.find(t => t.id === p.team_id)?.name || <span className="text-white/25 italic">—</span>}
+                          </td>
+                        )}
                         <td className="px-4 py-2 text-kawaYellow font-bold text-right">{p.score.toLocaleString()}</td>
                         {currentQuestion && (
                           <>

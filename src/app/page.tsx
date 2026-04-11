@@ -184,7 +184,7 @@ export default function HomePage() {
                 await fetch('/api/game/claim-player', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ playerId: selectedPlayer.id, nickname: nickname.trim(), realName: selectedPlayer.nickname }),
+                  body: JSON.stringify({ gameId, playerId: selectedPlayer.id, nickname: nickname.trim(), realName: selectedPlayer.nickname }),
                 })
                 setLoading(false)
                 router.push(`/play/${gameId}?playerId=${selectedPlayer.id}`)

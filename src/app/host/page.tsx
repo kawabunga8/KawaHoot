@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
+import { hostFetch } from '@/lib/host-fetch'
 import HostGate from '@/components/HostGate'
 import type { CSVRow, KawaClass } from '@/types'
 
@@ -89,7 +90,7 @@ export default function HostPage() {
 
   async function handleReplay(gameId: string) {
     setReplayingId(gameId)
-    const res = await fetch('/api/game/replay', {
+    const res = await hostFetch('/api/game/replay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId }),
@@ -155,7 +156,7 @@ export default function HostPage() {
     if (!title.trim()) { setError('Enter a game title'); return }
     if (!questions.length) { setError('Upload a CSV with questions'); return }
     setLoading(true)
-    const res = await fetch('/api/game/create', {
+    const res = await hostFetch('/api/game/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: title.trim(), questions }),
