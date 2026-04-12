@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, QuizQuestion, Player, Team } from '@/types'
 
@@ -659,11 +660,11 @@ export default function PlayPage() {
             🔁 If the teacher replays, you&apos;ll be moved automatically
           </p>
 
-          <a href="/"
+          <Link href="/"
             className="block w-full bg-kawaPurple hover:bg-purple-600 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95"
             style={{ fontFamily: "'Fredoka One', cursive" }}>
             Leave Game →
-          </a>
+          </Link>
         </div>
       </div>
     )
