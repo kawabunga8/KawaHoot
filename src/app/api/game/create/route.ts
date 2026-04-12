@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Missing title or questions' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Generate unique PIN
   let pin = generatePin()

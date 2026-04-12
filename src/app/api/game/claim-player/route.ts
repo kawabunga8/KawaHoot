@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Missing nickname' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Verify player belongs to the specified game
   const { data: player } = await supabase

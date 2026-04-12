@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (auth) return auth
 
   const { gameId, action } = await req.json()
-  const supabase = createClient()
+  const supabase = await createClient()
 
   if (action === 'pause') {
     const { error } = await supabase

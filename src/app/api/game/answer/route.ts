@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid answer' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Verify game is active and get server-side timing
   const { data: game } = await supabase

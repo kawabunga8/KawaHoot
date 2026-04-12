@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const pin = req.nextUrl.searchParams.get('pin')
   if (!pin) return NextResponse.json({ valid: false })
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data } = await supabase
     .from('games')
     .select('id, status, mode')

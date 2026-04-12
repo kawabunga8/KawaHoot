@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const { gameId, action } = body
-  const supabase = createClient()
+  const supabase = await createClient()
 
   if (action === 'set_mode') {
     const { mode } = body // 'individual' | 'teams'

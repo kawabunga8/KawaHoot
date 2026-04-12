@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Missing pin or nickname' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: game } = await supabase
     .from('games')

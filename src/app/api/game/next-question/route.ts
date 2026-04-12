@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (auth) return auth
 
   const { gameId, targetIndex } = await req.json()
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: game } = await supabase
     .from('games')

@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (auth) return auth
 
   const { gameId } = await req.json()
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: original } = await supabase.from('games').select('title, mode').eq('id', gameId).single()
   const { data: questions } = await supabase
