@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { Suspense, useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
@@ -16,6 +16,14 @@ What color is the sky?,Red,Green,Blue,Yellow,C,15
 Who wrote Romeo and Juliet?,Dickens,Shakespeare,Tolstoy,Austen,B,20`
 
 export default function HostPage() {
+  return (
+    <Suspense>
+      <HostPageContent />
+    </Suspense>
+  )
+}
+
+function HostPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
