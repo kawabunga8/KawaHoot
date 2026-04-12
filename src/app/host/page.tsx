@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
 import { hostFetch } from '@/lib/host-fetch'
@@ -17,7 +17,9 @@ Who wrote Romeo and Juliet?,Dickens,Shakespeare,Tolstoy,Austen,B,20`
 
 export default function HostPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
+  const launchClassId = searchParams.get('classId')
   const fileRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState<CSVRow[]>([])
@@ -314,10 +316,28 @@ export default function HostPage() {
         </form>
         {/* My Classes */}
         <div className="mt-10">
+          {launchClassId && classes.find(c => c.id === launchClassId) && (
+            <div className="bg-kawaPurple/30 border border-kawaPurple/60 rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
+              <span className="text-xl">🎮</span>
+              <p className="text-white text-sm flex-1">
+                Launched from Group Maker with <span className="font-bold">{classes.find(c => c.id === launchClassId)!.name}</span>.
+                Create a game, then import this class from the Roster panel.
+              </p>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl text-white font-bold" style={{ fontFamily: "'Fredoka One', cursive" }}>
               My Classes
             </h2>
+            <div className="flex items-center gap-3">
+              <a
+                href={`${process.env.NEXT_PUBLIC_GROUP_MAKER_URL || 'http://localhost:3001'}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-300 hover:text-white text-sm font-semibold transition-colors"
+              >
+                Open Group Maker →
+              </a>
             {!newClassMode && (
               <button
                 onClick={() => { setNewClassMode(true); setEditingClassId(null); setClassFormName(''); setClassFormStudents('') }}
@@ -327,6 +347,7 @@ export default function HostPage() {
                 + New Class
               </button>
             )}
+            </div>
           </div>
 
           {/* New class form */}
