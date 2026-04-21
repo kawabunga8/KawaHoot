@@ -14,6 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="https://student-hub-ten-pearl.vercel.app/rcs-theme.css" />
+      </head>
       <body className="antialiased min-h-screen bg-kawaDark">
         {children}
         <MusicPlayerWrapper />
