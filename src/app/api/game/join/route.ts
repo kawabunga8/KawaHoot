@@ -53,6 +53,9 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
+  if (error?.code === '23505') {
+    return NextResponse.json({ success: false, error: 'Nickname already taken!' }, { status: 409 })
+  }
   if (error || !player) {
     return NextResponse.json({ success: false, error: 'Failed to join' }, { status: 500 })
   }

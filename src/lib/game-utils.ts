@@ -9,7 +9,7 @@ export function calculatePoints(
   responseTimeMs: number,
   timeLimitSeconds: number
 ): number {
-  if (!isCorrect) return 0
+  if (!isCorrect || timeLimitSeconds <= 0) return 0
   const timeLimitMs = timeLimitSeconds * 1000
   const ratio = Math.max(0, 1 - responseTimeMs / timeLimitMs)
   // Base 500 + up to 500 speed bonus

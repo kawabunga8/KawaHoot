@@ -218,10 +218,13 @@ export default function PlayPage() {
       // Find this player in the new game by matching nickname
       const { data: playerData } = await supabase
         .from('players').select('id').eq('game_id', data.next_game_id).eq('nickname', player?.nickname || '').single()
+      clearInterval(poll)
       if (playerData) {
-        clearInterval(poll)
         setFollowingReplay(true)
         router.push(`/play/${data.next_game_id}?playerId=${playerData.id}`)
+      } else {
+        // Player not found in new game — send them to join screen
+        router.push('/')
       }
     }, 2000)
     return () => clearInterval(poll)
@@ -239,22 +242,34 @@ export default function PlayPage() {
     return () => clearInterval(tick)
   }, [game?.status, game?.current_question_started_at, currentQuestion]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const submittingRef = useRef(false)
   const submitAnswer = useCallback(async (answer: AnswerKey) => {
     const g = gameRef.current
-    if (selectedAnswer || !currentQuestion || !playerId || !g?.current_question_started_at) return
+    if (selectedAnswer || submittingRef.current || !currentQuestion || !playerId || !g?.current_question_started_at) return
+    submittingRef.current = true
     setSelectedAnswer(answer)
     const responseTime = Date.now() - new Date(g.current_question_started_at).getTime()
-    // Fire and forget — result is revealed only when teacher presses Reveal Answer
-    fetch('/api/game/answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        gameId, playerId,
-        questionId: currentQuestion.id,
-        selectedAnswer: answer,
-        responseTimeMs: responseTime,
-      }),
-    })
+    try {
+      const res = await fetch('/api/game/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId, playerId,
+          questionId: currentQuestion.id,
+          selectedAnswer: answer,
+          responseTimeMs: responseTime,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        // Roll back optimistic selection so player can try again
+        setSelectedAnswer(null)
+      }
+    } catch {
+      setSelectedAnswer(null)
+    } finally {
+      submittingRef.current = false
+    }
   }, [selectedAnswer, currentQuestion, playerId, gameId])
 
   if (!game || !player) {

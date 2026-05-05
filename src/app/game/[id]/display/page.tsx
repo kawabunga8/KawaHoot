@@ -116,7 +116,11 @@ export default function DisplayPage() {
       supabase.from('answers').select('selected_answer').eq('question_id', currentQuestion!.id)
         .then(({ data }) => {
           const counts = { A: 0, B: 0, C: 0, D: 0 }
-          data?.forEach(a => { counts[a.selected_answer as keyof typeof counts]++ })
+          data?.forEach(a => {
+            if (['A', 'B', 'C', 'D'].includes(a.selected_answer)) {
+              counts[a.selected_answer as keyof typeof counts]++
+            }
+          })
           setAnswerCounts(counts)
         })
     }

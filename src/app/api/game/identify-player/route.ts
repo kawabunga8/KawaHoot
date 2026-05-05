@@ -27,6 +27,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Roster player not in this game' }, { status: 403 })
   }
 
+  // Verify the roster player is actually a pre-registered, unclaimed placeholder
+  const { data: rosterFull } = await supabase
+    .from('players').select('is_pre_registered, is_claimed').eq('id', rosterPlayerId).single()
+  if (!rosterFull?.is_pre_registered || rosterFull.is_claimed) {
+    return NextResponse.json({ success: false, error: 'Roster player already claimed' }, { status: 409 })
+  }
+
   const { error: updateError } = await supabase
     .from('players')
     .update({ nickname: realName })

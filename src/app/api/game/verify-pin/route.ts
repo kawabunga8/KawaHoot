@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: NextRequest) {
   const pin = req.nextUrl.searchParams.get('pin')
-  if (!pin) return NextResponse.json({ valid: false })
+  if (!pin || !/^\d{6}$/.test(pin)) return NextResponse.json({ valid: false })
 
   const supabase = await createClient()
   const { data } = await supabase

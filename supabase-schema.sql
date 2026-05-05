@@ -103,6 +103,7 @@ create table if not exists teams (
 );
 
 alter table players add column if not exists team_id uuid references teams(id) on delete set null;
+alter table games add column if not exists previous_status text;
 alter table players add column if not exists is_pre_registered boolean not null default false;
 alter table players add column if not exists real_name text;
 alter table players add column if not exists is_claimed boolean not null default false;
