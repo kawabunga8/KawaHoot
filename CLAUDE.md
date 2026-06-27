@@ -18,8 +18,9 @@ There is no test runner configured.
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 SUPABASE_SECRET_KEY          # service role key — bypasses RLS, server-only
-HOST_PASSWORD                # teacher password, defaults to 'teacher'. Server-only — never prefix this with NEXT_PUBLIC_, or it ships in the client bundle and stops being a secret.
 ```
+
+No host password env var anymore — see Host Authentication below.
 
 ## Architecture
 
@@ -29,8 +30,8 @@ Kawahoot is a Kahoot-style classroom quiz game. Next.js 14 App Router + Supabase
 
 | Route | Purpose |
 |---|---|
-| `/` | Player join: PIN → roster selection → nickname |
-| `/host` | Teacher: create games, manage class rosters |
+| `/` | Player join: PIN → roster selection (or auto-named guest) |
+| `/host` | Teacher: create games, manage class rosters (requires `@myrcs.ca` login) |
 | `/game/[id]` | Host control panel during a live game |
 | `/game/[id]/display` | Projector view (no auth) |
 | `/play/[gameId]` | Player in-game view |
@@ -55,18 +56,21 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Pre-registration / Roster System
 
-- `classes` and `students` tables are shared with a separate "Group Maker" app in the same Supabase project.
+- `classes` and `students` tables are shared with student-hub (the central student data app) and a separate "Group Maker" app, same Supabase project. `students.email` is the source of truth for matching a signed-in student to their roster row.
 - When a teacher imports a class into a game, players are inserted with `is_pre_registered=true`.
 - When a student joins, they claim their pre-registered row: `is_claimed=true` is set and `nickname` is updated. `real_name` stores the original roster name.
-- Guest joins (not on roster) go through `/api/game/join` and create a fresh player row.
+- Guests (not on roster) go through `/api/game/join` with just `{ pin }` — no nickname is accepted from the client. The server assigns the next free `Guest1`, `Guest2`, ... name in that game (retries on rare collisions via the unique-constraint error code).
+- Planned: students sign in with Google (restricted to `@rcseagles.ca`) on `/` to auto-claim their pre-registered row by matching `students.email`, instead of picking their name from a list. Not yet implemented.
 
 ### Host Authentication
 
-`HostGate` component and `useHostAuth` hook (`src/lib/host-auth.ts`) gate the `/host` and `/game/[id]` pages client-side — this remains a soft barrier for classroom use, not a real account system.
+Real Supabase Auth, same account as TOC-Dayplans / Student Hub / RCS Report Card Tool (same Supabase project, same `auth.users` table) — restricted to `@myrcs.ca` emails.
 
-The password check itself, however, happens server-side: `useHostAuth().login()` POSTs the password to `/api/host/login`, which compares it against the server-only `HOST_PASSWORD` env var (`src/lib/require-host.ts`) and returns an HMAC token derived from that secret. The client stores only this token (`sessionStorage`, key `kawahoot_host_token`) and sends it as `x-host-token` on every host-only API call via `hostFetch()`. `requireHost()` recomputes the same HMAC server-side and compares with `crypto.timingSafeEqual`.
-
-This means the actual password is never sent to the browser as a literal value embedded in the JS bundle — only entered once at login and checked server-side. Every host-only route (`/api/classes`, `/api/game/create`, `/api/game/teams`, etc.) must call `requireHost(req)` and use `hostFetch()` from the client — a route that skips this check is reachable by anyone with the deployed URL, no password needed.
+- `middleware.ts` gates `/host/:path*` and `/game/:path*` (except `/game/[id]/display`, the projector view, intentionally unauthenticated) — redirects to `/login` if there's no session or the email isn't `@myrcs.ca`.
+- `/login` (`LoginClient.tsx`) — `supabase.auth.signInWithPassword`. No separate teacher account needed if you already have one for the other RCS apps.
+- API routes call `await requireHost(req)` (`src/lib/require-host.ts`), which checks the real session server-side via `createClient()` from `src/lib/supabase/server.ts` — not a password comparison.
+- `hostFetch()` (`src/lib/host-fetch.ts`) is now a thin `fetch` wrapper with `credentials: 'include'` — the session travels as a cookie automatically on same-origin requests, no token/header needed.
+- `HostGate` is a no-op passthrough component kept only so `/host` and `/game/[id]` don't need their JSX restructured — the real gate is `middleware.ts`, which runs before the page renders.
 
 ### Scoring
 

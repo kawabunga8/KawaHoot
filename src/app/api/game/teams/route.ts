@@ -7,7 +7,7 @@ import { requireHost } from '@/lib/require-host'
  *  body: { gameId, action: 'create' | 'assign' | 'delete' | 'set_mode', ...rest }
  */
 export async function POST(req: NextRequest) {
-  const auth = requireHost(req)
+  const auth = await requireHost(req)
   if (auth) return auth
 
   const body = await req.json()

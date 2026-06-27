@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
+import { createClient } from '@/lib/supabase/server'
 
-// HOST_PASSWORD is server-only (no NEXT_PUBLIC_ prefix) — never shipped to the client bundle.
-const SECRET = process.env.HOST_PASSWORD || 'teacher'
+const TEACHER_DOMAIN = '@myrcs.ca'
 
-/** Deterministic token derived from the server-only secret. Never sent to the client except after a verified login. */
-export function makeHostToken(): string {
-  return crypto.createHmac('sha256', SECRET).update('kawahoot-host').digest('hex')
-}
-
-export function verifyHostPassword(password: string): boolean {
-  return password === SECRET
-}
-
-/** Returns a 401 response if the request lacks a valid host token, otherwise null. */
-export function requireHost(req: NextRequest): NextResponse | null {
-  const token = req.headers.get('x-host-token') || ''
-  const expected = makeHostToken()
-  const valid = token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
-  if (!valid) {
+/**
+ * Returns a 401 response if the request isn't from an authenticated @myrcs.ca
+ * teacher, otherwise null. Real auth — the Supabase session cookie set by
+ * middleware.ts, not a shared password — so this can no longer be bypassed
+ * by reading a value out of the public JS bundle.
+ */
+export async function requireHost(req: NextRequest): Promise<NextResponse | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.email?.toLowerCase().endsWith(TEACHER_DOMAIN)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
   return null

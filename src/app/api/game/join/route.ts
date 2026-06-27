@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
-  const { pin, nickname } = await req.json()
-  if (!pin || !nickname) {
-    return NextResponse.json({ success: false, error: 'Missing pin or nickname' }, { status: 400 })
+  const { pin } = await req.json()
+  if (!pin) {
+    return NextResponse.json({ success: false, error: 'Missing pin' }, { status: 400 })
   }
 
   const supabase = await createClient()
@@ -18,18 +18,6 @@ export async function POST(req: NextRequest) {
 
   if (!game) {
     return NextResponse.json({ success: false, error: 'Game not found' }, { status: 404 })
-  }
-
-  // Check nickname uniqueness in this game
-  const { data: existing } = await supabase
-    .from('players')
-    .select('id')
-    .eq('game_id', game.id)
-    .ilike('nickname', nickname)
-    .single()
-
-  if (existing) {
-    return NextResponse.json({ success: false, error: 'Nickname already taken!' }, { status: 409 })
   }
 
   // In teams mode, find the team with the fewest members to auto-assign
@@ -47,18 +35,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { data: player, error } = await supabase
+  // Guests are auto-named Guest1, Guest2, ... — find the next free number in this game.
+  const { data: existingGuests } = await supabase
     .from('players')
-    .insert({ game_id: game.id, nickname, score: 0, team_id: teamId })
-    .select()
-    .single()
+    .select('nickname')
+    .eq('game_id', game.id)
+    .ilike('nickname', 'Guest%')
 
-  if (error?.code === '23505') {
-    return NextResponse.json({ success: false, error: 'Nickname already taken!' }, { status: 409 })
-  }
-  if (error || !player) {
-    return NextResponse.json({ success: false, error: 'Failed to join' }, { status: 500 })
+  const taken = new Set((existingGuests || []).map(p => p.nickname))
+  let nextNum = 1
+  for (const p of existingGuests || []) {
+    const m = /^Guest(\d+)$/.exec(p.nickname)
+    if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1)
   }
 
-  return NextResponse.json({ success: true, gameId: game.id, playerId: player.id })
+  let player = null
+  let lastError = null
+  for (let attempt = 0; attempt < 10 && !player; attempt++) {
+    const candidate = `Guest${nextNum + attempt}`
+    if (taken.has(candidate)) continue
+    const { data, error } = await supabase
+      .from('players')
+      .insert({ game_id: game.id, nickname: candidate, score: 0, team_id: teamId })
+      .select()
+      .single()
+    if (data) { player = data; break }
+    lastError = error
+    if (error?.code !== '23505') break // not a name-uniqueness collision — stop retrying
+  }
+
+  if (!player) {
+    return NextResponse.json({ success: false, error: lastError?.message || 'Failed to join' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, gameId: game.id, playerId: player.id, nickname: player.nickname })
 }

@@ -16,7 +16,7 @@ async function supabaseGet(path: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = requireHost(req)
+  const auth = await requireHost(req)
   if (auth) return auth
 
   const [classes, students] = await Promise.all([

@@ -5,7 +5,7 @@ import { requireHost } from '@/lib/require-host'
 import type { CSVRow } from '@/types'
 
 export async function POST(req: NextRequest) {
-  const auth = requireHost(req)
+  const auth = await requireHost(req)
   if (auth) return auth
 
   const { title, questions } = await req.json() as { title: string; questions: CSVRow[] }

@@ -35,18 +35,13 @@ export default function HomePage() {
     setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
   }
 
-  async function handleJoin(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleJoinAsGuest() {
     setError('')
-    if (!nickname.trim()) {
-      setError('Enter a nickname!')
-      return
-    }
     setLoading(true)
     const res = await fetch('/api/game/join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin, nickname: nickname.trim() }),
+      body: JSON.stringify({ pin }),
     })
     const data = await res.json()
     setLoading(false)
@@ -216,7 +211,7 @@ export default function HomePage() {
             )
           ) : step === 'guest' ? (
             // Only reachable from roster step via explicit "Join as Guest" button
-            <form onSubmit={handleJoin} className="space-y-5">
+            <div className="space-y-5">
               <button type="button" onClick={() => setStep('roster')}
                 className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
                 ← Back to class list
@@ -224,18 +219,16 @@ export default function HomePage() {
               <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
                 Join as Guest
               </h2>
-              <p className="text-white/50 text-sm text-center -mt-2">Not on the class list? Enter any name to join.</p>
-              <input type="text" maxLength={20} value={nickname} onChange={e => setNickname(e.target.value)}
-                placeholder="Your name or nickname" autoFocus
-                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-xl font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
-              />
+              <p className="text-white/50 text-sm text-center -mt-2">
+                Not on the class list? You&apos;ll join as the next available <span className="text-kawaYellow font-bold">Guest</span> name.
+              </p>
               {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
-              <button type="submit" disabled={loading}
+              <button type="button" onClick={handleJoinAsGuest} disabled={loading}
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? 'Joining...' : "Let's Go! 🚀"}
               </button>
-            </form>
+            </div>
           ) : null}
         </div>
 

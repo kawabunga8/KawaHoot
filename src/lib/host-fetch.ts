@@ -1,15 +1,10 @@
 'use client'
 
-const SESSION_KEY = 'kawahoot_host_token'
-
-/** fetch wrapper that injects the host auth token (obtained via /api/host/login) on all requests. */
+/**
+ * fetch wrapper for host-only API calls. Auth now travels via the Supabase
+ * session cookie set at /login (same-origin requests include it
+ * automatically) — this no longer injects a password/token header.
+ */
 export function hostFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_KEY) : null
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...(options.headers as Record<string, string>),
-      'x-host-token': token || '',
-    },
-  })
+  return fetch(url, { ...options, credentials: 'include' })
 }

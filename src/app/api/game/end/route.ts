@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireHost } from '@/lib/require-host'
 
 export async function POST(req: NextRequest) {
-  const auth = requireHost(req)
+  const auth = await requireHost(req)
   if (auth) return auth
 
   const { gameId } = await req.json()
