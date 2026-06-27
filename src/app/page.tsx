@@ -82,11 +82,11 @@ function HomePageContent() {
     setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
   }
 
-  async function handleGoogleSignIn() {
+  async function handleMicrosoftSignIn() {
     setError('')
     const supabase = createClient()
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider: 'azure',
       options: { redirectTo: `${window.location.origin}/?pin=${pin}&gameId=${gameId}` },
     })
   }
@@ -199,11 +199,11 @@ function HomePageContent() {
               </h2>
               <button
                 type="button"
-                onClick={handleGoogleSignIn}
+                onClick={handleMicrosoftSignIn}
                 className="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm flex items-center justify-center gap-2"
                 style={{ fontFamily: "'Fredoka One', cursive" }}
               >
-                🔑 Sign in with Google (@rcseagles.ca)
+                🔑 Sign in with Microsoft (@rcseagles.ca)
               </button>
               {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
               <div className="flex items-center gap-3">
