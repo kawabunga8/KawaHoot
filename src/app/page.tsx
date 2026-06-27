@@ -11,14 +11,46 @@ export default function HomePage() {
   const router = useRouter()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'roster' | 'email' | 'code' | 'nickname' | 'guest'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'email' | 'code' | 'setpw' | 'nickname' | 'guest'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; nickname: string } | null>(null)
   const [signInEmail, setSignInEmail] = useState('')
+  const [signInPassword, setSignInPassword] = useState('')
   const [code, setCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+
+  // Shared tail end of any successful sign-in (password or OTP): resolve the
+  // current session's email to a roster claim (or guest fallback), then drop
+  // the session — it's a one-shot identity check, not a persistent login on
+  // a device that may be shared with the next student.
+  async function completeSignIn() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const email = user?.email
+    await supabase.auth.signOut()
+
+    if (!email) {
+      setLoading(false)
+      setError('Sign-in failed')
+      return
+    }
+
+    const res = await fetch('/api/game/auto-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId, email }),
+    })
+    const data = await res.json()
+    setLoading(false)
+    if (!data.success) {
+      setError(data.error || 'Sign-in failed')
+      return
+    }
+    router.push(`/play/${data.gameId}?playerId=${data.playerId}`)
+  }
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -40,8 +72,26 @@ export default function HomePage() {
     setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
   }
 
-  async function handleSendCode(e: React.FormEvent) {
+  async function handlePasswordSignIn(e: React.FormEvent) {
     e.preventDefault()
+    setError('')
+    const email = signInEmail.trim().toLowerCase()
+    if (!email.endsWith(STUDENT_DOMAIN)) {
+      setError(`Enter your ${STUDENT_DOMAIN} email`)
+      return
+    }
+    setLoading(true)
+    const supabase = createClient()
+    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: signInPassword })
+    if (signInErr) {
+      setLoading(false)
+      setError('Incorrect password — leave password blank and use "Email Me a Code" instead')
+      return
+    }
+    await completeSignIn()
+  }
+
+  async function handleSendCode() {
     setError('')
     const email = signInEmail.trim().toLowerCase()
     if (!email.endsWith(STUDENT_DOMAIN)) {
@@ -73,33 +123,36 @@ export default function HomePage() {
       token: code.trim(),
       type: 'email',
     })
+    setLoading(false)
     if (verifyError) {
-      setLoading(false)
       setError('Incorrect or expired code')
       return
     }
-    const { data: { user } } = await supabase.auth.getUser()
-    const email = user?.email
-    await supabase.auth.signOut() // one-shot identity check, not a persistent session on a shared device
+    // Signed in via OTP — offer to set a password so next time skips the email round-trip.
+    setStep('setpw')
+  }
 
-    if (!email) {
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (newPassword.trim().length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    setLoading(true)
+    const supabase = createClient()
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword.trim() })
+    if (updateError) {
       setLoading(false)
-      setError('Sign-in failed')
+      setError(updateError.message)
       return
     }
+    await completeSignIn()
+  }
 
-    const res = await fetch('/api/game/auto-claim', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId, email }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    if (!data.success) {
-      setError(data.error || 'Sign-in failed')
-      return
-    }
-    router.push(`/play/${data.gameId}?playerId=${data.playerId}`)
+  async function handleSkipPassword() {
+    setLoading(true)
+    await completeSignIn()
   }
 
   async function handleJoinAsGuest() {
@@ -249,7 +302,7 @@ export default function HomePage() {
               </div>
             </div>
           ) : step === 'email' ? (
-            <form onSubmit={handleSendCode} className="space-y-5">
+            <form onSubmit={handlePasswordSignIn} className="space-y-5">
               <button type="button" onClick={() => setStep('roster')}
                 className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
                 ← Back
@@ -257,7 +310,6 @@ export default function HomePage() {
               <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
                 Enter Your Email
               </h2>
-              <p className="text-white/50 text-sm text-center -mt-2">We&apos;ll send you a 6-digit code.</p>
               <input
                 type="email"
                 value={signInEmail}
@@ -266,11 +318,23 @@ export default function HomePage() {
                 autoFocus
                 className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-lg font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
               />
+              <input
+                type="password"
+                value={signInPassword}
+                onChange={e => setSignInPassword(e.target.value)}
+                placeholder="Password (leave blank if you don't have one yet)"
+                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
+              />
               {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
-              <button type="submit" disabled={loading}
+              <button type="submit" disabled={loading || !signInPassword}
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
-                {loading ? 'Sending...' : 'Send Code'}
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+              <button type="button" onClick={handleSendCode} disabled={loading}
+                className="w-full bg-white/10 hover:bg-white/20 border border-white/20 disabled:opacity-50 text-white/80 font-bold py-3 rounded-2xl transition-all text-sm"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                📧 Email Me a Code Instead
               </button>
             </form>
           ) : step === 'code' ? (
@@ -300,6 +364,33 @@ export default function HomePage() {
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? 'Verifying...' : "Let's Go! 🚀"}
+              </button>
+            </form>
+          ) : step === 'setpw' ? (
+            <form onSubmit={handleSetPassword} className="space-y-5">
+              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                Set a Password?
+              </h2>
+              <p className="text-white/50 text-sm text-center -mt-2">
+                Skip the email code next time you join a game.
+              </p>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="New password (6+ characters)"
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-lg text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
+              />
+              {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {loading ? 'Saving...' : 'Save & Continue'}
+              </button>
+              <button type="button" onClick={handleSkipPassword} disabled={loading}
+                className="w-full text-white/50 hover:text-white text-sm py-2 transition-colors">
+                Skip for now
               </button>
             </form>
           ) : step === 'nickname' ? (
