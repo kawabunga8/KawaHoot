@@ -60,16 +60,19 @@ export async function POST(req: NextRequest) {
 
   if (action === 'pre_register') {
     const admin = createAdminClient()
-    const { names } = body as { names: string[] }
+    // Accepts either {students: {id, name}[]} (preferred — links the player row back to
+    // public.students for email-based auto-claim) or the legacy {names: string[]}.
+    const { students, names } = body as { students?: { id: string; name: string }[]; names?: string[] }
+    const entries = students ?? (names || []).map(name => ({ id: null as string | null, name }))
     const results: { nickname: string; playerId: string }[] = []
     const errors: string[] = []
-    for (const nickname of names) {
+    for (const { id: studentId, name: nickname } of entries) {
       const { data: existing } = await admin
         .from('players').select('id, is_pre_registered').eq('game_id', gameId).ilike('nickname', nickname).single()
       if (existing) {
         const { error: updateError } = await admin
           .from('players')
-          .update({ is_pre_registered: true, is_claimed: false })
+          .update({ is_pre_registered: true, is_claimed: false, student_id: studentId })
           .eq('id', existing.id)
         if (updateError) errors.push(`${nickname}: ${updateError.message}`)
         results.push({ nickname, playerId: existing.id })
@@ -77,7 +80,7 @@ export async function POST(req: NextRequest) {
       }
       const { data: player, error: insertError } = await admin
         .from('players')
-        .insert({ game_id: gameId, nickname, score: 0, is_pre_registered: true, is_claimed: false })
+        .insert({ game_id: gameId, nickname, score: 0, is_pre_registered: true, is_claimed: false, student_id: studentId })
         .select('id').single()
       if (insertError) {
         errors.push(`${nickname}: ${insertError.message}`)

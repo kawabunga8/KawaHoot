@@ -41,6 +41,7 @@ export type Player = {
   team_id: string | null
   is_pre_registered: boolean
   is_claimed: boolean
+  student_id: string | null
   joined_at: string
 }
 

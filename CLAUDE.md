@@ -56,11 +56,14 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Pre-registration / Roster System
 
-- `classes` and `students` tables are shared with student-hub (the central student data app) and a separate "Group Maker" app, same Supabase project. `students.email` is the source of truth for matching a signed-in student to their roster row.
-- When a teacher imports a class into a game, players are inserted with `is_pre_registered=true`.
-- When a student joins, they claim their pre-registered row: `is_claimed=true` is set and `nickname` is updated. `real_name` stores the original roster name.
-- Guests (not on roster) go through `/api/game/join` with just `{ pin }` — no nickname is accepted from the client. The server assigns the next free `Guest1`, `Guest2`, ... name in that game (retries on rare collisions via the unique-constraint error code).
-- Planned: students sign in with Google (restricted to `@rcseagles.ca`) on `/` to auto-claim their pre-registered row by matching `students.email`, instead of picking their name from a list. Not yet implemented.
+- `classes` and `students` tables are shared with student-hub (the central student data app) and a separate "Group Maker" app, same Supabase project. `students.email` and `players.student_id` are what link a signed-in student to their roster row.
+- When a teacher imports a class into a game (`importStudents` in `game/[id]/page.tsx`), players are inserted with `is_pre_registered=true` and `student_id` set, via the `pre_register` action on `/api/game/teams` (`{students: {id, name}[]}`).
+- Two ways for a student to claim their pre-registered row:
+  1. **Google sign-in** (`/` → "Sign in with Google (@rcseagles.ca)" → OAuth redirect back to `/?pin=...&gameId=...` → `POST /api/game/auto-claim` with the signed-in email). Matches `students.email` → `players.student_id` in this game, sets `is_claimed=true`, `nickname`/`real_name` to their real name. The Supabase session is signed out immediately after — this is a one-shot identity check, not a persistent login, since the device may be shared.
+  2. **Manual click** — pick your name from the roster grid, then choose a fun display nickname (`/api/game/claim-player`). Both paths race for the same unclaimed row; whichever happens first wins.
+  3. If a `@rcseagles.ca` student doesn't match any roster row in this game (not enrolled, no class imported, etc.), `/api/game/auto-claim` falls back to a guest join automatically rather than blocking them.
+- Guests (not on roster, or unmatched, or any non-`@rcseagles.ca`/`@myrcs.ca` sign-in) go through `/api/game/join` with just `{ pin }` — no nickname accepted from the client. The server assigns the next free `Guest1`, `Guest2`, ... name in that game (retries on rare collisions via the unique-constraint error code).
+- A student being absent never blocks the game: unclaimed pre-registered rows are just inert placeholders, and the host can also explicitly mark someone absent (`remove_player` action) to drop their placeholder entirely.
 
 ### Host Authentication
 

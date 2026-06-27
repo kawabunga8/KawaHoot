@@ -1,19 +1,66 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 export default function HomePage() {
+  return (
+    <Suspense>
+      <HomePageContent />
+    </Suspense>
+  )
+}
+
+function HomePageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'roster' | 'nickname' | 'guest'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'nickname' | 'guest' | 'authenticating'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; nickname: string } | null>(null)
+
+  // Returning from a Google sign-in redirect: pin/gameId are restored from the URL,
+  // and the Supabase client has already picked up the session from the redirect.
+  useEffect(() => {
+    const returnedPin = searchParams.get('pin')
+    const returnedGameId = searchParams.get('gameId')
+    if (!returnedPin || !returnedGameId) return
+
+    setPin(returnedPin)
+    setGameId(returnedGameId)
+    setStep('authenticating')
+
+    ;(async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const email = user?.email
+      await supabase.auth.signOut() // one-shot identity check, not a persistent session for this device
+
+      if (!email) {
+        setStep('roster')
+        return
+      }
+
+      const res = await fetch('/api/game/auto-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: returnedGameId, email }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setError(data.error || 'Sign-in failed')
+        setStep('roster')
+        return
+      }
+      router.push(`/play/${data.gameId}?playerId=${data.playerId}`)
+    })()
+  }, [searchParams, router])
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -33,6 +80,15 @@ export default function HomePage() {
     setGameId(data.gameId)
     setRoster(data.roster || [])
     setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
+  }
+
+  async function handleGoogleSignIn() {
+    setError('')
+    const supabase = createClient()
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/?pin=${pin}&gameId=${gameId}` },
+    })
   }
 
   async function handleJoinAsGuest() {
@@ -93,7 +149,11 @@ export default function HomePage() {
       {/* Card */}
       <div className="relative z-10 w-full max-w-md">
         <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 shadow-2xl">
-          {step === 'pin' ? (
+          {step === 'authenticating' ? (
+            <div className="py-8 text-center">
+              <p className="text-white/60 text-lg" style={{ fontFamily: "'Fredoka One', cursive" }}>Signing you in...</p>
+            </div>
+          ) : step === 'pin' ? (
             <form onSubmit={handlePinSubmit} className="space-y-5">
               <h2
                 className="text-2xl font-bold text-center text-white"
@@ -137,6 +197,20 @@ export default function HomePage() {
               >
                 Who are you?
               </h2>
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm flex items-center justify-center gap-2"
+                style={{ fontFamily: "'Fredoka One', cursive" }}
+              >
+                🔑 Sign in with Google (@rcseagles.ca)
+              </button>
+              {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-white/30 text-xs">or pick from class list</span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
               {roster.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                   {roster.map(r => (

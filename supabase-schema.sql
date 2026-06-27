@@ -107,6 +107,8 @@ alter table games add column if not exists previous_status text;
 alter table players add column if not exists is_pre_registered boolean not null default false;
 alter table players add column if not exists real_name text;
 alter table players add column if not exists is_claimed boolean not null default false;
+alter table players add column if not exists student_id uuid references public.students(id);
+create index if not exists idx_players_student_id on players(student_id);
 
 create index if not exists idx_teams_game_id on teams(game_id);
 create index if not exists idx_players_team_id on players(team_id);

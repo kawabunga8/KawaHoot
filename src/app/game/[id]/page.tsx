@@ -232,13 +232,13 @@ export default function GameHostPage() {
   const importStudents = useCallback(async () => {
     const cls = classes.find(c => c.id === selectedClassId)
     if (!cls) return
-    const present = cls.students.filter(s => attendance[s.full_name] !== false).map(s => s.full_name)
+    const present = cls.students.filter(s => attendance[s.full_name] !== false).map(s => ({ id: s.id, name: s.full_name }))
     if (!present.length) return
     setImportingStudents(true)
     setImportedCount(present.length) // set immediately so button changes right away
     const res = await hostFetch('/api/game/teams', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: id, action: 'pre_register', names: present }),
+      body: JSON.stringify({ gameId: id, action: 'pre_register', students: present }),
     })
     const data = await res.json()
     if (data.players?.length) setImportedCount(data.players.length)
