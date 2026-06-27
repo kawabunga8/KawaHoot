@@ -13,9 +13,9 @@ export default function HostGate({ children }: { children: React.ReactNode }) {
 
   if (authed) return <>{children}</>
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (login(password)) {
+    if (await login(password)) {
       setError(false)
     } else {
       setError(true)

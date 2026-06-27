@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireHost } from '@/lib/require-host'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
@@ -14,7 +15,10 @@ async function supabaseGet(path: string) {
   return res.json()
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = requireHost(req)
+  if (auth) return auth
+
   const [classes, students] = await Promise.all([
     supabaseGet('classes?select=id,name,created_at&order=created_at'),
     supabaseGet('students?select=id,class_id,full_name'),

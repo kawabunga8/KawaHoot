@@ -16,9 +16,9 @@ There is no test runner configured.
 
 ```
 NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 SUPABASE_SECRET_KEY          # service role key — bypasses RLS, server-only
-NEXT_PUBLIC_HOST_PASSWORD    # teacher password, defaults to 'teacher'
+HOST_PASSWORD                # teacher password, defaults to 'teacher'. Server-only — never prefix this with NEXT_PUBLIC_, or it ships in the client bundle and stops being a secret.
 ```
 
 ## Architecture
@@ -62,7 +62,11 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Host Authentication
 
-`HostGate` component and `useHostAuth` hook (`src/lib/host-auth.ts`) gate the `/host` and `/game/[id]` pages. Auth state is stored in `sessionStorage` only — it is intentionally not secure, just a soft barrier for classroom use. Password comes from `NEXT_PUBLIC_HOST_PASSWORD`.
+`HostGate` component and `useHostAuth` hook (`src/lib/host-auth.ts`) gate the `/host` and `/game/[id]` pages client-side — this remains a soft barrier for classroom use, not a real account system.
+
+The password check itself, however, happens server-side: `useHostAuth().login()` POSTs the password to `/api/host/login`, which compares it against the server-only `HOST_PASSWORD` env var (`src/lib/require-host.ts`) and returns an HMAC token derived from that secret. The client stores only this token (`sessionStorage`, key `kawahoot_host_token`) and sends it as `x-host-token` on every host-only API call via `hostFetch()`. `requireHost()` recomputes the same HMAC server-side and compares with `crypto.timingSafeEqual`.
+
+This means the actual password is never sent to the browser as a literal value embedded in the JS bundle — only entered once at login and checked server-side. Every host-only route (`/api/classes`, `/api/game/create`, `/api/game/teams`, etc.) must call `requireHost(req)` and use `hostFetch()` from the client — a route that skips this check is reachable by anyone with the deployed URL, no password needed.
 
 ### Scoring
 

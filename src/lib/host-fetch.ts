@@ -1,13 +1,15 @@
 'use client'
 
-/** fetch wrapper that injects the host password header on all requests. */
+const SESSION_KEY = 'kawahoot_host_token'
+
+/** fetch wrapper that injects the host auth token (obtained via /api/host/login) on all requests. */
 export function hostFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const password = process.env.NEXT_PUBLIC_HOST_PASSWORD || 'teacher'
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_KEY) : null
   return fetch(url, {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
-      'x-host-password': password,
+      'x-host-token': token || '',
     },
   })
 }

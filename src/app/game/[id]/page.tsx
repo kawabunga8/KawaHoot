@@ -69,7 +69,7 @@ export default function GameHostPage() {
 
   // Load classes from shared API (group-maker data)
   useEffect(() => {
-    fetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
+    hostFetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
       if (Array.isArray(data)) setClasses(data)
     }).catch(() => {})
   }, [])

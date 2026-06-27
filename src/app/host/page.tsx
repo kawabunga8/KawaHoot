@@ -48,7 +48,7 @@ function HostPageContent() {
     if (stored) {
       try { setSavedGames(JSON.parse(stored)) } catch {}
     }
-    fetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
+    hostFetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
       if (Array.isArray(data)) setClasses(data)
     }).catch(() => {})
   }, [supabase])
