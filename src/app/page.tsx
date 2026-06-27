@@ -1,66 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function HomePage() {
-  return (
-    <Suspense>
-      <HomePageContent />
-    </Suspense>
-  )
-}
+const STUDENT_DOMAIN = '@rcseagles.ca'
 
-function HomePageContent() {
+export default function HomePage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [pin, setPin] = useState('')
   const [nickname, setNickname] = useState('')
-  const [step, setStep] = useState<'pin' | 'roster' | 'nickname' | 'guest' | 'authenticating'>('pin')
+  const [step, setStep] = useState<'pin' | 'roster' | 'email' | 'code' | 'nickname' | 'guest'>('pin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [gameId, setGameId] = useState('')
   const [roster, setRoster] = useState<{ id: string; nickname: string }[]>([])
   const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; nickname: string } | null>(null)
-
-  // Returning from a Google sign-in redirect: pin/gameId are restored from the URL,
-  // and the Supabase client has already picked up the session from the redirect.
-  useEffect(() => {
-    const returnedPin = searchParams.get('pin')
-    const returnedGameId = searchParams.get('gameId')
-    if (!returnedPin || !returnedGameId) return
-
-    setPin(returnedPin)
-    setGameId(returnedGameId)
-    setStep('authenticating')
-
-    ;(async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      const email = user?.email
-      await supabase.auth.signOut() // one-shot identity check, not a persistent session for this device
-
-      if (!email) {
-        setStep('roster')
-        return
-      }
-
-      const res = await fetch('/api/game/auto-claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId: returnedGameId, email }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setError(data.error || 'Sign-in failed')
-        setStep('roster')
-        return
-      }
-      router.push(`/play/${data.gameId}?playerId=${data.playerId}`)
-    })()
-  }, [searchParams, router])
+  const [signInEmail, setSignInEmail] = useState('')
+  const [code, setCode] = useState('')
 
   async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,13 +40,66 @@ function HomePageContent() {
     setStep('roster') // always show roster step — player must pick a name or explicitly choose guest
   }
 
-  async function handleMicrosoftSignIn() {
+  async function handleSendCode(e: React.FormEvent) {
+    e.preventDefault()
     setError('')
+    const email = signInEmail.trim().toLowerCase()
+    if (!email.endsWith(STUDENT_DOMAIN)) {
+      setError(`Enter your ${STUDENT_DOMAIN} email`)
+      return
+    }
+    setLoading(true)
     const supabase = createClient()
-    await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: { redirectTo: `${window.location.origin}/?pin=${pin}&gameId=${gameId}` },
+    const { error: otpError } = await supabase.auth.signInWithOtp({ email })
+    setLoading(false)
+    if (otpError) {
+      setError(otpError.message)
+      return
+    }
+    setStep('code')
+  }
+
+  async function handleVerifyCode(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (!code.trim()) {
+      setError('Enter the code from your email')
+      return
+    }
+    setLoading(true)
+    const supabase = createClient()
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: signInEmail.trim().toLowerCase(),
+      token: code.trim(),
+      type: 'email',
     })
+    if (verifyError) {
+      setLoading(false)
+      setError('Incorrect or expired code')
+      return
+    }
+    const { data: { user } } = await supabase.auth.getUser()
+    const email = user?.email
+    await supabase.auth.signOut() // one-shot identity check, not a persistent session on a shared device
+
+    if (!email) {
+      setLoading(false)
+      setError('Sign-in failed')
+      return
+    }
+
+    const res = await fetch('/api/game/auto-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId, email }),
+    })
+    const data = await res.json()
+    setLoading(false)
+    if (!data.success) {
+      setError(data.error || 'Sign-in failed')
+      return
+    }
+    router.push(`/play/${data.gameId}?playerId=${data.playerId}`)
   }
 
   async function handleJoinAsGuest() {
@@ -149,11 +160,7 @@ function HomePageContent() {
       {/* Card */}
       <div className="relative z-10 w-full max-w-md">
         <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 shadow-2xl">
-          {step === 'authenticating' ? (
-            <div className="py-8 text-center">
-              <p className="text-white/60 text-lg" style={{ fontFamily: "'Fredoka One', cursive" }}>Signing you in...</p>
-            </div>
-          ) : step === 'pin' ? (
+          {step === 'pin' ? (
             <form onSubmit={handlePinSubmit} className="space-y-5">
               <h2
                 className="text-2xl font-bold text-center text-white"
@@ -199,13 +206,12 @@ function HomePageContent() {
               </h2>
               <button
                 type="button"
-                onClick={handleMicrosoftSignIn}
+                onClick={() => { setError(''); setStep('email') }}
                 className="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 text-sm flex items-center justify-center gap-2"
                 style={{ fontFamily: "'Fredoka One', cursive" }}
               >
-                🔑 Sign in with Microsoft (@rcseagles.ca)
+                📧 Sign in with your {STUDENT_DOMAIN} email
               </button>
-              {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-white/10" />
                 <span className="text-white/30 text-xs">or pick from class list</span>
@@ -242,6 +248,60 @@ function HomePageContent() {
                 </button>
               </div>
             </div>
+          ) : step === 'email' ? (
+            <form onSubmit={handleSendCode} className="space-y-5">
+              <button type="button" onClick={() => setStep('roster')}
+                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
+                ← Back
+              </button>
+              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                Enter Your Email
+              </h2>
+              <p className="text-white/50 text-sm text-center -mt-2">We&apos;ll send you a 6-digit code.</p>
+              <input
+                type="email"
+                value={signInEmail}
+                onChange={e => setSignInEmail(e.target.value)}
+                placeholder={`yourname${STUDENT_DOMAIN}`}
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-lg font-bold text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
+              />
+              {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {loading ? 'Sending...' : 'Send Code'}
+              </button>
+            </form>
+          ) : step === 'code' ? (
+            <form onSubmit={handleVerifyCode} className="space-y-5">
+              <button type="button" onClick={() => { setStep('email'); setCode('') }}
+                className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition-colors">
+                ← Use a different email
+              </button>
+              <h2 className="text-2xl font-bold text-center text-white" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                Enter Your Code
+              </h2>
+              <p className="text-white/50 text-sm text-center -mt-2">
+                Sent to <span className="text-kawaYellow font-bold">{signInEmail}</span>
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-3xl font-bold tracking-[0.4em] text-white placeholder:text-white/30 focus:outline-none focus:border-kawaCoral transition-colors"
+              />
+              {error && <p className="text-kawared text-center font-bold animate-wiggle text-sm">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
+                style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {loading ? 'Verifying...' : "Let's Go! 🚀"}
+              </button>
+            </form>
           ) : step === 'nickname' ? (
             // Only reachable from roster step with a selected player — selectedPlayer must be set
             selectedPlayer ? (
