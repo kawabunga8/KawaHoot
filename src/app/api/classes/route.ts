@@ -38,11 +38,14 @@ export async function GET(req: NextRequest) {
   // Some blocks teach a different class depending on the quarter (e.g. ICT 9 Q1 vs
   // Q2, Computer Studies 10 Q1/Q2 vs Q3/Q4) -- only show what's actually being
   // taught right now. Classes with active_quarters=null (all-year) always show.
-  // If today doesn't fall in any defined quarter (e.g. summer break), skip this
-  // extra filter rather than show an empty list.
+  // If today doesn't fall in any defined quarter (e.g. summer break, or between
+  // quarters), fall back to the most recently-ended quarter rather than no filter,
+  // so the list still reflects what was last being taught.
   const today = new Date().toISOString().split('T')[0]
   const currentQuarter = Array.isArray(quarters)
-    ? quarters.find((q: { id: number; start_date: string; end_date: string }) => today >= q.start_date && today <= q.end_date)?.id ?? null
+    ? quarters.find((q: { id: number; start_date: string; end_date: string }) => today >= q.start_date && today <= q.end_date)?.id
+      ?? quarters.filter((q: { end_date: string }) => q.end_date < today).sort((a: { end_date: string }, b: { end_date: string }) => b.end_date.localeCompare(a.end_date))[0]?.id
+      ?? null
     : null
 
   const classes = currentQuarter
