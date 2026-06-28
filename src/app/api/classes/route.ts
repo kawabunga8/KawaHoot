@@ -24,13 +24,30 @@ export async function GET(req: NextRequest) {
   // Kawahoot-only classes (created via "+ New Class" below) have school_year
   // null and should always show up regardless of the selected year.
   const classesFilter = schoolYear
-    ? `classes?select=id,name,school_year,block_label,sort_order&or=(school_year.eq.${schoolYear},school_year.is.null)&order=sort_order`
-    : `classes?select=id,name,school_year,block_label,sort_order&order=sort_order`
+    ? `classes?select=id,name,school_year,block_label,sort_order,active_quarters&or=(school_year.eq.${schoolYear},school_year.is.null)&order=sort_order`
+    : `classes?select=id,name,school_year,block_label,sort_order,active_quarters&order=sort_order`
 
-  const classes = await supabaseGet(classesFilter)
-  if (!Array.isArray(classes)) {
-    return NextResponse.json({ error: 'Failed to load classes', detail: classes }, { status: 500 })
+  const [classesRaw, quarters] = await Promise.all([
+    supabaseGet(classesFilter),
+    supabaseGet('school_quarters?select=id,start_date,end_date'),
+  ])
+  if (!Array.isArray(classesRaw)) {
+    return NextResponse.json({ error: 'Failed to load classes', detail: classesRaw }, { status: 500 })
   }
+
+  // Some blocks teach a different class depending on the quarter (e.g. ICT 9 Q1 vs
+  // Q2, Computer Studies 10 Q1/Q2 vs Q3/Q4) -- only show what's actually being
+  // taught right now. Classes with active_quarters=null (all-year) always show.
+  // If today doesn't fall in any defined quarter (e.g. summer break), skip this
+  // extra filter rather than show an empty list.
+  const today = new Date().toISOString().split('T')[0]
+  const currentQuarter = Array.isArray(quarters)
+    ? quarters.find((q: { id: number; start_date: string; end_date: string }) => today >= q.start_date && today <= q.end_date)?.id ?? null
+    : null
+
+  const classes = currentQuarter
+    ? classesRaw.filter((c: { active_quarters: number[] | null }) => !c.active_quarters || c.active_quarters.includes(currentQuarter))
+    : classesRaw
 
   const classIds = classes.map((c: { id: string }) => c.id)
   if (classIds.length === 0) return NextResponse.json([])
