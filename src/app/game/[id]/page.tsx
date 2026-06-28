@@ -925,11 +925,10 @@ export default function GameHostPage() {
                   title="New game — load different quiz">
                   ⟳ New
                 </a>
-                <button onClick={startGame} disabled={loading || players.length === 0 || blocked}
+                <button onClick={startGame} disabled={loading || blocked}
                   className="flex-1 bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-2xl py-5 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-xl"
                   style={{ fontFamily: "'Fredoka One', cursive" }}>
                   {loading ? 'Starting...'
-                    : players.length === 0 ? 'Waiting for players...'
                     : unclaimed.length > 0 ? `⏳ Waiting for ${unclaimed.length} student${unclaimed.length !== 1 ? 's' : ''} to join...`
                     : unassigned.length > 0 ? `👥 ${unassigned.length} player${unassigned.length !== 1 ? 's' : ''} not assigned to a team`
                     : `Start Game (${players.length} players) 🚀`}
