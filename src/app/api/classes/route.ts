@@ -19,20 +19,43 @@ export async function GET(req: NextRequest) {
   const auth = await requireHost(req)
   if (auth) return auth
 
-  const [classes, students] = await Promise.all([
-    supabaseGet('classes?select=id,name,created_at&order=created_at'),
-    supabaseGet('students?select=id,class_id,full_name'),
-  ])
+  const schoolYear = req.nextUrl.searchParams.get('school_year')
+  // Classes shared with student-hub are tagged with a school_year; ad-hoc
+  // Kawahoot-only classes (created via "+ New Class" below) have school_year
+  // null and should always show up regardless of the selected year.
+  const classesFilter = schoolYear
+    ? `classes?select=id,name,school_year,block_label,sort_order&or=(school_year.eq.${schoolYear},school_year.is.null)&order=sort_order`
+    : `classes?select=id,name,school_year,block_label,sort_order&order=sort_order`
 
+  const classes = await supabaseGet(classesFilter)
   if (!Array.isArray(classes)) {
     return NextResponse.json({ error: 'Failed to load classes', detail: classes }, { status: 500 })
   }
 
-  const result = classes.map((c: { id: string; name: string; created_at: string }) => ({
-    ...c,
-    students: Array.isArray(students)
-      ? students.filter((s: { class_id: string }) => s.class_id === c.id)
-      : [],
+  const classIds = classes.map((c: { id: string }) => c.id)
+  if (classIds.length === 0) return NextResponse.json([])
+
+  // Real roster membership lives in enrollments -> students (first_name/last_name),
+  // not a class_id/full_name column directly on students.
+  const [enrollments, students] = await Promise.all([
+    supabaseGet(`enrollments?select=class_id,student_id&class_id=in.(${classIds.join(',')})`),
+    supabaseGet(`students?select=id,first_name,last_name`),
+  ])
+
+  const studentsById = new Map(
+    Array.isArray(students) ? students.map((s: { id: string; first_name: string; last_name: string }) => [s.id, s]) : []
+  )
+
+  const result = classes.map((c: { id: string; name: string; school_year: string | null; block_label: string | null; sort_order: number | null }) => ({
+    id: c.id,
+    name: c.name,
+    school_year: c.school_year,
+    block_label: c.block_label,
+    students: (Array.isArray(enrollments) ? enrollments : [])
+      .filter((e: { class_id: string }) => e.class_id === c.id)
+      .map((e: { student_id: string }) => studentsById.get(e.student_id))
+      .filter((s: { id: string; first_name: string; last_name: string } | undefined): s is { id: string; first_name: string; last_name: string } => Boolean(s))
+      .map((s) => ({ id: s.id, full_name: `${s.first_name} ${s.last_name}` })),
   }))
 
   return NextResponse.json(result)

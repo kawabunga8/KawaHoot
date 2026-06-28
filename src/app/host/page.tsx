@@ -10,6 +10,16 @@ import type { CSVRow, KawaClass } from '@/types'
 
 type SavedGame = { id: string; title: string; pin: string; createdAt: string }
 
+const KNOWN_YEARS = ['2025-26', '2026-27']
+
+function currentSchoolYear(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  const startYear = month >= 9 ? year : year - 1
+  return `${startYear}-${String(startYear + 1).slice(2)}`
+}
+
 const SAMPLE_CSV = `question,option_a,option_b,option_c,option_d,correct_answer,time_limit
 What is 2 + 2?,3,4,5,6,B,20
 What color is the sky?,Red,Green,Blue,Yellow,C,15
@@ -38,20 +48,26 @@ function HostPageContent() {
   const [savedGames, setSavedGames] = useState<SavedGame[]>([])
   const [replayingId, setReplayingId] = useState<string | null>(null)
   const [classes, setClasses] = useState<KawaClass[]>([])
+  const [classesYear, setClassesYear] = useState(currentSchoolYear)
   const [editingClassId, setEditingClassId] = useState<string | null>(null)
   const [newClassMode, setNewClassMode] = useState(false)
   const [classFormName, setClassFormName] = useState('')
   const [classFormStudents, setClassFormStudents] = useState('')
+
+  function loadClasses(year: string) {
+    hostFetch(`/api/classes?school_year=${encodeURIComponent(year)}`).then(r => r.ok ? r.json() : Promise.reject()).then(data => {
+      if (Array.isArray(data)) setClasses(data)
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     const stored = localStorage.getItem('kawahoot_games')
     if (stored) {
       try { setSavedGames(JSON.parse(stored)) } catch {}
     }
-    hostFetch('/api/classes').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
-      if (Array.isArray(data)) setClasses(data)
-    }).catch(() => {})
-  }, [supabase])
+    loadClasses(classesYear)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, classesYear])
 
   function parseStudents(raw: string) {
     return raw.split('\n').map(s => s.trim()).filter(Boolean)
@@ -338,6 +354,13 @@ function HostPageContent() {
               My Classes
             </h2>
             <div className="flex items-center gap-3">
+              <select
+                value={classesYear}
+                onChange={e => setClassesYear(e.target.value)}
+                className="bg-white/10 border border-white/30 rounded-xl px-3 py-1.5 text-white text-sm font-semibold focus:outline-none focus:border-kawaYellow transition-colors"
+              >
+                {KNOWN_YEARS.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
+              </select>
               <a
                 href={`${process.env.NEXT_PUBLIC_GROUP_MAKER_URL || 'http://localhost:3001'}`}
                 target="_blank"

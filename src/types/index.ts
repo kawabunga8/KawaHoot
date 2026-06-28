@@ -73,7 +73,8 @@ export type Student = {
 export type KawaClass = {
   id: string
   name: string
-  created_at: string
+  school_year?: string | null
+  block_label?: string | null
   students: Student[]
 }
 
