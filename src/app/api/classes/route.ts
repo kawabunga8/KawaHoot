@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireHost } from '@/lib/require-host'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
+// Service-role key, not the anon/publishable key: public.courses, kawahoot_classes,
+// and kawahoot_students only grant RLS access to the "authenticated" role, and this
+// route never forwards a real user JWT to PostgREST (it auths the caller separately
+// via requireHost() below). The anon key would get silently empty-result'ed by RLS.
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY!
 
 async function supabaseGet(path: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
