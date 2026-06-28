@@ -76,10 +76,10 @@ function HostPageContent() {
   async function createClass() {
     if (!classFormName.trim()) return
     const names = parseStudents(classFormStudents)
-    const { data: cls } = await supabase.from('classes').insert({ name: classFormName.trim() }).select('id, name, created_at').single()
+    const { data: cls } = await supabase.from('kawahoot_classes').insert({ name: classFormName.trim() }).select('id, name, created_at').single()
     if (!cls) return
     if (names.length > 0) {
-      await supabase.from('students').insert(names.map(n => ({ class_id: cls.id, full_name: n })))
+      await supabase.from('kawahoot_students').insert(names.map(n => ({ class_id: cls.id, full_name: n })))
     }
     setClasses(prev => [...prev, { ...cls, students: names.map(n => ({ id: '', class_id: cls.id, full_name: n })) }])
     setNewClassMode(false)
@@ -91,10 +91,10 @@ function HostPageContent() {
     if (!classFormName.trim()) return
     const names = parseStudents(classFormStudents)
     setClasses(prev => prev.map(c => c.id === id ? { ...c, name: classFormName.trim(), students: names.map(n => ({ id: '', class_id: id, full_name: n })) } : c))
-    await supabase.from('classes').update({ name: classFormName.trim() }).eq('id', id)
-    await supabase.from('students').delete().eq('class_id', id)
+    await supabase.from('kawahoot_classes').update({ name: classFormName.trim() }).eq('id', id)
+    await supabase.from('kawahoot_students').delete().eq('class_id', id)
     if (names.length > 0) {
-      await supabase.from('students').insert(names.map(n => ({ class_id: id, full_name: n })))
+      await supabase.from('kawahoot_students').insert(names.map(n => ({ class_id: id, full_name: n })))
     }
     setEditingClassId(null)
     setClassFormName('')
@@ -110,8 +110,8 @@ function HostPageContent() {
 
   async function deleteClass(id: string) {
     setClasses(prev => prev.filter(c => c.id !== id))
-    await supabase.from('students').delete().eq('class_id', id)
-    await supabase.from('classes').delete().eq('id', id)
+    await supabase.from('kawahoot_students').delete().eq('class_id', id)
+    await supabase.from('kawahoot_classes').delete().eq('id', id)
   }
 
   async function handleReplay(gameId: string) {
