@@ -426,9 +426,11 @@ export default function GameHostPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId: id }),
     })
-    setGame(prev => prev ? { ...prev, status: 'finished' } : prev)
-    setLoading(false)
-  }, [id])
+    // Players and the projector display pick up status='finished' via their own
+    // realtime subscriptions and show the leaderboard themselves -- the host
+    // doesn't need to see that screen too, so send them back to the main menu.
+    router.push('/host')
+  }, [id, router])
 
   const pauseGame = useCallback(async () => {
     setGame(prev => prev ? { ...prev, status: 'paused' } : prev)
@@ -540,6 +542,14 @@ export default function GameHostPage() {
                 {game.pin}
               </p>
             </div>
+            {['question', 'answer_reveal', 'leaderboard', 'paused'].includes(game.status) && (
+              <button onClick={() => { if (confirm('End the game now? Players will see the current standings as the final scores.')) endGame() }}
+                disabled={loading}
+                className="flex-shrink-0 bg-white/10 hover:bg-red-500/80 border border-white/20 text-white/70 hover:text-white font-bold text-sm py-2 px-4 rounded-xl transition-all disabled:opacity-50"
+                title="End the game early and show final scores">
+                ⏹ End Game
+              </button>
+            )}
         </div>
       ) : (
         <div className="flex items-center justify-between mb-6">
@@ -550,11 +560,21 @@ export default function GameHostPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/rcs-logo.png" alt="RCS" className="h-40 mt-3 pointer-events-none" />
           </div>
-          <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
-            <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>
-            <p className="text-kawaYellow font-bold text-3xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
-              {game.pin}
-            </p>
+          <div className="flex items-center gap-3">
+            {['question', 'answer_reveal', 'leaderboard', 'paused'].includes(game.status) && (
+              <button onClick={() => { if (confirm('End the game now? Players will see the current standings as the final scores.')) endGame() }}
+                disabled={loading}
+                className="flex-shrink-0 bg-white/10 hover:bg-red-500/80 border border-white/20 text-white/70 hover:text-white font-bold text-sm py-2 px-4 rounded-xl transition-all disabled:opacity-50"
+                title="End the game early and show final scores">
+                ⏹ End Game
+              </button>
+            )}
+            <div className="text-center bg-white/10 border border-white/20 rounded-2xl px-6 py-3">
+              <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Game PIN</p>
+              <p className="text-kawaYellow font-bold text-3xl tracking-widest" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                {game.pin}
+              </p>
+            </div>
           </div>
         </div>
       )}
