@@ -157,11 +157,15 @@ export default function HomePage() {
 
   async function handleJoinAsGuest() {
     setError('')
+    if (!nickname.trim()) {
+      setError('Please enter a nickname')
+      return
+    }
     setLoading(true)
     const res = await fetch('/api/game/join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify({ pin, nickname: nickname.trim() }),
     })
     const data = await res.json()
     setLoading(false)
@@ -445,10 +449,20 @@ export default function HomePage() {
                 Join as Guest
               </h2>
               <p className="text-white/50 text-sm text-center -mt-2">
-                Not on the class list? You&apos;ll join as the next available <span className="text-kawaYellow font-bold">Guest</span> name.
+                Not on the class list? Pick a nickname to play under.
               </p>
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => { setNickname(e.target.value); setError('') }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleJoinAsGuest() }}
+                placeholder="Your nickname"
+                maxLength={20}
+                autoFocus
+                className="w-full bg-white/10 border-2 border-white/20 focus:border-kawaYellow text-white text-center text-xl font-bold py-4 rounded-2xl outline-none transition-colors placeholder:text-white/30"
+              />
               {error && <p className="text-kawared text-center font-bold animate-wiggle">{error}</p>}
-              <button type="button" onClick={handleJoinAsGuest} disabled={loading}
+              <button type="button" onClick={handleJoinAsGuest} disabled={loading || !nickname.trim()}
                 className="w-full bg-kawaGreen hover:bg-green-400 disabled:opacity-50 text-white font-bold text-xl py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg"
                 style={{ fontFamily: "'Fredoka One', cursive" }}>
                 {loading ? 'Joining...' : "Let's Go! 🚀"}

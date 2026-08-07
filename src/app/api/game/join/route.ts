@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const MAX_NICKNAME_LENGTH = 20
+
 export async function POST(req: NextRequest) {
-  const { pin } = await req.json()
+  const { pin, nickname } = await req.json()
   if (!pin) {
     return NextResponse.json({ success: false, error: 'Missing pin' }, { status: 400 })
+  }
+
+  const requestedNickname = typeof nickname === 'string' ? nickname.trim() : ''
+  if (!requestedNickname) {
+    return NextResponse.json({ success: false, error: 'Please enter a nickname' }, { status: 400 })
+  }
+  if (requestedNickname.length > MAX_NICKNAME_LENGTH) {
+    return NextResponse.json(
+      { success: false, error: `Nickname must be ${MAX_NICKNAME_LENGTH} characters or fewer` },
+      { status: 400 },
+    )
   }
 
   const supabase = await createClient()
@@ -35,37 +48,31 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Guests are auto-named Guest1, Guest2, ... — find the next free number in this game.
-  const { data: existingGuests } = await supabase
+  const { data: existingPlayers } = await supabase
     .from('players')
     .select('nickname')
     .eq('game_id', game.id)
-    .ilike('nickname', 'Guest%')
 
-  const taken = new Set((existingGuests || []).map(p => p.nickname))
-  let nextNum = 1
-  for (const p of existingGuests || []) {
-    const m = /^Guest(\d+)$/.exec(p.nickname)
-    if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1)
+  const taken = new Set((existingPlayers || []).map(p => p.nickname.toLowerCase()))
+  if (taken.has(requestedNickname.toLowerCase())) {
+    return NextResponse.json(
+      { success: false, error: 'That nickname is taken — try another' },
+      { status: 409 },
+    )
   }
 
-  let player = null
-  let lastError = null
-  for (let attempt = 0; attempt < 10 && !player; attempt++) {
-    const candidate = `Guest${nextNum + attempt}`
-    if (taken.has(candidate)) continue
-    const { data, error } = await supabase
-      .from('players')
-      .insert({ game_id: game.id, nickname: candidate, score: 0, team_id: teamId })
-      .select()
-      .single()
-    if (data) { player = data; break }
-    lastError = error
-    if (error?.code !== '23505') break // not a name-uniqueness collision — stop retrying
-  }
+  const { data: player, error } = await supabase
+    .from('players')
+    .insert({ game_id: game.id, nickname: requestedNickname, score: 0, team_id: teamId })
+    .select()
+    .single()
 
   if (!player) {
-    return NextResponse.json({ success: false, error: lastError?.message || 'Failed to join' }, { status: 500 })
+    // 23505 is a unique-violation: someone claimed the name between the check and the insert.
+    const message = error?.code === '23505'
+      ? 'That nickname is taken — try another'
+      : error?.message || 'Failed to join'
+    return NextResponse.json({ success: false, error: message }, { status: error?.code === '23505' ? 409 : 500 })
   }
 
   return NextResponse.json({ success: true, gameId: game.id, playerId: player.id, nickname: player.nickname })
