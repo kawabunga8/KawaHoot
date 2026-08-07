@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { calculatePoints } from '@/lib/game-utils'
 
 export async function POST(req: NextRequest) {
@@ -13,12 +13,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid answer' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  // Service-role, not the cookie client: players are unauthenticated guests, and
+  // quiz_questions is no longer readable by anon (it holds the answer key). The
+  // route validates game status, question identity, player membership and timing
+  // itself, so it does not rely on RLS for correctness.
+  const supabase = createAdminClient()
 
   // Verify game is active and get server-side timing
   const { data: game } = await supabase
     .from('games')
-    .select('status, current_question_started_at')
+    .select('status, current_question_started_at, current_question_index')
     .eq('id', gameId)
     .single()
 
@@ -26,16 +30,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Question not active' }, { status: 400 })
   }
 
-  // Verify question belongs to this game
-  const { data: question } = await supabase
+  // The submitted question must be the one the game is actually on. Checking
+  // only that it belongs to the game would let a player answer every remaining
+  // question during question 1 — each would be timed against the current
+  // question's start, so each would score as near-instant.
+  const { data: questions } = await supabase
     .from('quiz_questions')
-    .select('correct_answer, time_limit')
-    .eq('id', questionId)
+    .select('id, correct_answer, time_limit')
     .eq('game_id', gameId)
-    .single()
+    .order('order_index')
+
+  const question = questions?.[game.current_question_index]
 
   if (!question) {
     return NextResponse.json({ success: false, error: 'Question not found' }, { status: 404 })
+  }
+
+  if (question.id !== questionId) {
+    return NextResponse.json({ success: false, error: 'Not the current question' }, { status: 400 })
   }
 
   // Verify player belongs to this game
@@ -77,7 +89,11 @@ export async function POST(req: NextRequest) {
   const scoringTimeMs = Math.min(responseTimeMs, question.time_limit * 1000)
   const pointsEarned = calculatePoints(isCorrect, scoringTimeMs, question.time_limit)
 
-  await supabase.from('answers').insert({
+  // The check above is not atomic with this insert, so two near-simultaneous
+  // submissions can both pass it. The unique(player_id, question_id) constraint
+  // is what actually stops the double — but only if we notice it failed and
+  // stop before awarding points twice for one answer.
+  const { error: insertError } = await supabase.from('answers').insert({
     game_id: gameId,
     player_id: playerId,
     question_id: questionId,
@@ -87,12 +103,28 @@ export async function POST(req: NextRequest) {
     points_earned: pointsEarned,
   })
 
+  if (insertError) {
+    const alreadyAnswered = insertError.code === '23505'
+    return NextResponse.json(
+      { success: false, error: alreadyAnswered ? 'Already answered' : 'Failed to record answer' },
+      { status: alreadyAnswered ? 409 : 500 },
+    )
+  }
+
   if (pointsEarned > 0) {
-    // Atomic increment — requires the increment_player_score RPC in supabase-schema.sql
-    await supabase.rpc('increment_player_score', {
+    // Atomic increment — defined in supabase-schema.sql. If this fails the answer
+    // is recorded but the score is not, so surface it rather than silently
+    // leaving the player on zero.
+    const { error: scoreError } = await supabase.rpc('increment_player_score', {
       player_id_param: playerId,
       points_param: pointsEarned,
     })
+    if (scoreError) {
+      return NextResponse.json(
+        { success: false, error: 'Answer saved but score failed to update' },
+        { status: 500 },
+      )
+    }
   }
 
   return NextResponse.json({ success: true, isCorrect, pointsEarned })
