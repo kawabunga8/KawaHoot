@@ -68,9 +68,18 @@ alter table answers enable row level security;
 
 -- RLS Policies (allow all for anon - suitable for classroom use)
 create policy "Allow all on games" on games for all using (true) with check (true);
-create policy "Allow all on quiz_questions" on quiz_questions for all using (true) with check (true);
 create policy "Allow all on players" on players for all using (true) with check (true);
 create policy "Allow all on answers" on answers for all using (true) with check (true);
+
+-- quiz_questions is deliberately NOT readable by anon: the row contains
+-- correct_answer, so an "allow all" policy hands every player the answer key via
+-- the public REST API, no matter what the app fetches. Players get questions
+-- through /api/game/current-question, which uses the service-role key and
+-- withholds correct_answer until the host reveals it. Hosts are authenticated.
+create policy "Hosts read quiz_questions" on quiz_questions
+  for select to authenticated using (true);
+create policy "Hosts write quiz_questions" on quiz_questions
+  for all to authenticated using (true) with check (true);
 
 -- Enable realtime on all tables
 alter publication supabase_realtime add table games;
@@ -82,6 +91,21 @@ alter table games replica identity full;
 alter table players replica identity full;
 alter table answers replica identity full;
 alter table quiz_questions replica identity full;
+
+-- Atomic score increment used by /api/game/answer. Read-modify-write from the
+-- app would lose points when two answers land at once, which is the normal case
+-- in a live game. This was previously missing from this file even though the
+-- route depends on it: without it every score silently stays 0.
+create or replace function increment_player_score(player_id_param uuid, points_param integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update players set score = score + points_param where id = player_id_param;
+end;
+$$;
 
 -- Classes + Students tables (shared with Group Maker app)
 -- These already exist in the shared Supabase project; documented here for reference.

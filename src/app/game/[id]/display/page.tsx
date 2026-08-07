@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, Player, QuizQuestion, Team } from '@/types'
@@ -26,7 +26,7 @@ export default function DisplayPage() {
   const supabase = useMemo(() => createClient(), [])
 
   const [game, setGame] = useState<Game | null>(null)
-  const [questions, setQuestions] = useState<QuizQuestion[]>([])
+  const [questionTotal, setQuestionTotal] = useState(0)
   const [currentQuestion, setCurrentQuestion] = useState<QuizQuestion | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -40,22 +40,31 @@ export default function DisplayPage() {
     })).sort((a, b) => b.score - a.score),
   [teams, players])
 
+  // Pull the current question from the API rather than the table: this page has
+  // no auth gate, so reading quiz_questions directly would expose the answer key
+  // to anyone holding the game URL. The API withholds it until the host reveals.
+  // Keyed on index+status so the 2s poll does not refetch on every tick.
+  const syncedKeyRef = useRef('')
+  const syncQuestion = useCallback(async (g: Game) => {
+    const key = `${g.current_question_index}:${g.status}`
+    if (syncedKeyRef.current === key) return
+    syncedKeyRef.current = key
+    const res = await fetch(`/api/game/current-question?gameId=${id}`)
+    const { question, total } = await res.json()
+    setQuestionTotal(total ?? 0)
+    setCurrentQuestion(question ?? null)
+  }, [id])
+
   // Initial load
   useEffect(() => {
     async function load() {
       const { data: gameData } = await supabase.from('games').select('*').eq('id', id).single()
       if (!gameData) return
       setGame(gameData)
-
-      const { data: qData } = await supabase
-        .from('quiz_questions').select('*').eq('game_id', id).order('order_index')
-      setQuestions(qData || [])
-      if (gameData.current_question_index >= 0 && qData) {
-        setCurrentQuestion(qData[gameData.current_question_index] || null)
-      }
+      syncQuestion(gameData)
     }
     load()
-  }, [id, supabase])
+  }, [id, supabase, syncQuestion])
 
   // Poll game state
   useEffect(() => {
@@ -63,29 +72,19 @@ export default function DisplayPage() {
       const { data } = await supabase.from('games').select('*').eq('id', id).single()
       if (!data) return
       setGame(data)
-      setQuestions(prev => {
-        if (data.current_question_index >= 0 && prev.length > 0) {
-          setCurrentQuestion(prev[data.current_question_index] || null)
-        }
-        return prev
-      })
+      syncQuestion(data)
     }, 2000)
     const sub = supabase.channel(`display-game-${id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, (payload) => {
         const row = payload.new as Game
         if (row.id === id) {
           setGame(row)
-          setQuestions(prev => {
-            if (row.current_question_index >= 0 && prev.length > 0) {
-              setCurrentQuestion(prev[row.current_question_index] || null)
-            }
-            return prev
-          })
+          syncQuestion(row)
         }
       })
       .subscribe()
     return () => { clearInterval(poll); supabase.removeChannel(sub) }
-  }, [id, supabase])
+  }, [id, supabase, syncQuestion])
 
   // Teams
   useEffect(() => {
@@ -245,7 +244,7 @@ export default function DisplayPage() {
           {/* Timer bar + meta row */}
           <div className="flex items-center gap-4 mb-3">
             <p className="text-white/40 text-sm font-bold uppercase tracking-widest flex-shrink-0">
-              Q{game.current_question_index + 1} / {questions.length}
+              Q{game.current_question_index + 1} / {questionTotal}
             </p>
             {game.status === 'question' && (
               <div className="flex-1 h-4 bg-white/10 rounded-full overflow-hidden">

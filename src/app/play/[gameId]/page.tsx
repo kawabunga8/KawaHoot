@@ -119,12 +119,10 @@ export default function PlayPage() {
     }
 
     if (g.status === 'question') {
-      const { data: questions } = await supabase
-        .from('quiz_questions')
-        .select('*')
-        .eq('game_id', gameId)
-        .order('order_index')
-      const q = questions?.[g.current_question_index]
+      // Via the API, not the table directly — the answer key is withheld while
+      // the question is live, so it never reaches the player's browser.
+      const res = await fetch(`/api/game/current-question?gameId=${gameId}`)
+      const { question: q } = await res.json()
       if (q) {
         setCurrentQuestion(q)
         setSelectedAnswer(null)
@@ -146,18 +144,26 @@ export default function PlayPage() {
       if (g.status === 'answer_reveal') {
         // Reveal this player's answer result and update their score
         if (playerId && currentQuestionRef.current) {
-          const { data: answer } = await supabase
-            .from('answers')
-            .select('is_correct, points_earned, selected_answer')
-            .eq('player_id', playerId)
-            .eq('question_id', currentQuestionRef.current.id)
-            .single()
+          // Re-fetch the question: the copy held from the 'question' step has no
+          // correct_answer, and the API only releases it once the host reveals.
+          const [{ data: answer }, revealRes] = await Promise.all([
+            supabase
+              .from('answers')
+              .select('is_correct, points_earned, selected_answer')
+              .eq('player_id', playerId)
+              .eq('question_id', currentQuestionRef.current.id)
+              .single(),
+            fetch(`/api/game/current-question?gameId=${gameId}`).then(r => r.json()),
+          ])
+          if (revealRes?.question?.correct_answer) {
+            setCurrentQuestion(revealRes.question)
+          }
           if (answer) {
             setAnswerResult({
               correct: answer.is_correct,
               points: answer.points_earned,
               selected: answer.selected_answer as AnswerKey,
-              correctAnswer: currentQuestionRef.current.correct_answer as AnswerKey,
+              correctAnswer: revealRes?.question?.correct_answer as AnswerKey,
             })
             const me = (players || []).find(p => p.id === playerId)
             if (me) setPlayer(prev => prev ? { ...prev, score: me.score } : prev)
