@@ -1,33 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireHost } from '@/lib/require-host'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-// Service-role key, not the anon/publishable key: public.courses, kawahoot_classes,
-// and kawahoot_students only grant RLS access to the "authenticated" role, and this
-// route never forwards a real user JWT to PostgREST (it auths the caller separately
-// via requireHost() below). The anon key would get silently empty-result'ed by RLS.
-const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY!
-
-async function supabaseGet(path: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
-    cache: 'no-store',
-  })
-  return res.json()
-}
+const COURSE_HUB_URL = process.env.COURSE_HUB_URL!
+const COURSE_HUB_API_KEY = process.env.COURSE_HUB_API_KEY!
 
 function currentSchoolYear(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() + 1
-  const startYear = month >= 9 ? year : year - 1
+  const startYear = month >= 7 ? year : year - 1
   return `${startYear}-${String(startYear + 1).slice(2)}`
 }
-
-type RealCourse = { id: string; name: string; block: string | null; school_year: string | null; type: string; quarters: string[] | null }
 
 export async function GET(req: NextRequest) {
   const auth = await requireHost(req)
@@ -35,73 +19,64 @@ export async function GET(req: NextRequest) {
 
   const schoolYear = req.nextUrl.searchParams.get('school_year') || currentSchoolYear()
 
-  // current_courses(p_school_year) resolves which version of each course applies for
-  // the year (handles supersession) -- same canonical, deduped catalog TOC-Dayplans/
-  // Report Card Tool/Group Maker use. Replaces the old public.classes-based query,
-  // which still has the pre-split duplicate/retired rows this never accounted for.
-  const [courses, quarters, kawahootClasses, kawahootStudents] = await Promise.all([
-    supabaseGet(`rpc/current_courses?p_school_year=${encodeURIComponent(schoolYear)}`),
-    supabaseGet('school_quarters?select=id,start_date,end_date'),
-    supabaseGet('kawahoot_classes?select=id,name,created_at&order=created_at'),
-    supabaseGet('kawahoot_students?select=id,class_id,full_name'),
+  // Real courses + rosters come from course-hub (single source of truth).
+  // Ad-hoc kawahoot_classes/students stay local to this app.
+  const [coursesRes, adHocData] = await Promise.all([
+    fetch(`${COURSE_HUB_URL}/api/courses?type=academic&school_year=${encodeURIComponent(schoolYear)}`, {
+      headers: { Authorization: `Bearer ${COURSE_HUB_API_KEY}` },
+      cache: 'no-store',
+    }),
+    (async () => {
+      const supabase = createAdminClient()
+      const [{ data: classes }, { data: students }] = await Promise.all([
+        supabase.from('kawahoot_classes').select('id,name,created_at').order('created_at'),
+        supabase.from('kawahoot_students').select('id,class_id,full_name'),
+      ])
+      return { classes: classes ?? [], students: students ?? [] }
+    })(),
   ])
 
-  if (!Array.isArray(courses)) {
-    return NextResponse.json({ error: 'Failed to load courses', detail: courses }, { status: 500 })
+  if (!coursesRes.ok) {
+    const detail = await coursesRes.text()
+    return NextResponse.json({ error: 'Failed to load courses', detail }, { status: coursesRes.status })
   }
 
-  // Same fallback as TOC-Dayplans/Group Maker: resolve today's quarter from
-  // public.school_quarters, falling back to the most recently-ended one (instead of
-  // showing every quarter-specific course at once) when today is outside all of them.
-  const today = new Date().toISOString().split('T')[0]
-  const currentQuarter = Array.isArray(quarters)
-    ? quarters.find((q: { id: number; start_date: string; end_date: string }) => today >= q.start_date && today <= q.end_date)?.id
-      ?? quarters.filter((q: { end_date: string }) => q.end_date < today).sort((a: { end_date: string }, b: { end_date: string }) => b.end_date.localeCompare(a.end_date))[0]?.id
-      ?? null
-    : null
+  const courses: Array<{ id: string; name: string; block: string | null; school_year: string | null }> =
+    await coursesRes.json()
 
-  const realCourses = (courses as RealCourse[])
-    .filter((c) => c.type === 'academic')
-    .filter((c) => !currentQuarter || !c.quarters || c.quarters.includes(String(currentQuarter)))
-
-  const courseIds = realCourses.map((c) => c.id)
-  const enrollments = courseIds.length > 0
-    ? await supabaseGet(`enrollments?select=course_id,student_id&course_id=in.(${courseIds.join(',')})`)
-    : []
-  const studentIds = Array.isArray(enrollments) ? [...new Set(enrollments.map((e: { student_id: string }) => e.student_id))] : []
-  const students = studentIds.length > 0
-    ? await supabaseGet(`students?select=id,first_name,last_name&id=in.(${studentIds.join(',')})`)
-    : []
-
-  const studentsById = new Map(
-    Array.isArray(students) ? students.map((s: { id: string; first_name: string; last_name: string }) => [s.id, s]) : []
+  // Fetch rosters for all courses in parallel from course-hub.
+  const rosterResults = await Promise.all(
+    courses.map((c) =>
+      fetch(`${COURSE_HUB_URL}/api/courses/${c.id}/roster`, {
+        headers: { Authorization: `Bearer ${COURSE_HUB_API_KEY}` },
+        cache: 'no-store',
+      })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => [])
+    )
   )
 
-  const realResult = realCourses.map((c) => ({
+  const realResult = courses.map((c, i) => ({
     id: c.id,
     name: c.name,
     school_year: c.school_year,
     block_label: c.block,
-    students: (Array.isArray(enrollments) ? enrollments : [])
-      .filter((e: { course_id: string }) => e.course_id === c.id)
-      .map((e: { student_id: string }) => studentsById.get(e.student_id))
-      .filter((s: { id: string; first_name: string; last_name: string } | undefined): s is { id: string; first_name: string; last_name: string } => Boolean(s))
-      .map((s) => ({ id: s.id, full_name: `${s.first_name} ${s.last_name}` })),
+    students: (rosterResults[i] as Array<{ id: string; full_name: string }>).map((s) => ({
+      id: s.id,
+      full_name: s.full_name,
+    })),
   }))
 
-  // Ad-hoc Kawahoot-only classes (created via "+ New Class") always show, regardless
-  // of school year/quarter -- they're not tied to a real course.
-  const adHocResult = Array.isArray(kawahootClasses)
-    ? kawahootClasses.map((c: { id: string; name: string }) => ({
-        id: c.id,
-        name: c.name,
-        school_year: null,
-        block_label: null,
-        students: Array.isArray(kawahootStudents)
-          ? kawahootStudents.filter((s: { class_id: string }) => s.class_id === c.id).map((s: { id: string; full_name: string }) => ({ id: s.id, full_name: s.full_name }))
-          : [],
-      }))
-    : []
+  // Ad-hoc classes created via "+ New Class" always show regardless of year.
+  const adHocResult = adHocData.classes.map((c: { id: string; name: string }) => ({
+    id: c.id,
+    name: c.name,
+    school_year: null,
+    block_label: null,
+    students: adHocData.students
+      .filter((s: { class_id: string }) => s.class_id === c.id)
+      .map((s: { id: string; full_name: string }) => ({ id: s.id, full_name: s.full_name })),
+  }))
 
   return NextResponse.json([...realResult, ...adHocResult])
 }
