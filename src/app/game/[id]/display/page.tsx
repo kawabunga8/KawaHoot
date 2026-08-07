@@ -183,7 +183,8 @@ export default function DisplayPage() {
           <h2 className="text-white font-bold text-6xl mb-4" style={{ fontFamily: "'Fredoka One', cursive" }}>
             {game.title}
           </h2>
-          <p className="text-purple-300 text-2xl mb-8">Join at <span className="text-kawaYellow font-bold">kawahoot.vercel.app</span></p>
+          <p className="text-purple-300 text-2xl uppercase tracking-widest font-bold mb-2">Players join at</p>
+          <p className="text-kawaYellow font-bold text-6xl mb-8" style={{ fontFamily: "'Fredoka One', cursive" }}>kawahoot.vercel.app</p>
           <div className="bg-white/10 border-4 border-kawaYellow rounded-3xl px-16 py-8">
             <p className="text-white/60 text-lg mb-2 font-bold uppercase tracking-widest">Game PIN</p>
             <p className="text-white font-bold text-8xl tracking-[0.3em]" style={{ fontFamily: "'Fredoka One', cursive" }}>
