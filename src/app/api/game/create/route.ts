@@ -20,7 +20,9 @@ export async function POST(req: NextRequest) {
   let pin = generatePin()
   let attempts = 0
   while (attempts < 10) {
-    const { data } = await supabase.from('games').select('id').eq('pin', pin).single()
+    // maybeSingle, not single: single() treats "no rows" as an error, which is
+    // the expected result here (a free PIN).
+    const { data } = await supabase.from('games').select('id').eq('pin', pin).maybeSingle()
     if (!data) break
     pin = generatePin()
     attempts++

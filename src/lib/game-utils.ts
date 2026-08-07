@@ -1,6 +1,14 @@
 /** Generate a random 6-digit PIN */
 export function generatePin(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  // crypto over Math.random: a predictable PIN lets someone guess their way into
+  // a live game. Rejection-sampled so the modulo does not skew the low digits.
+  const range = 900000
+  const limit = Math.floor(0xffffffff / range) * range
+  let n = 0
+  do {
+    n = crypto.getRandomValues(new Uint32Array(1))[0]
+  } while (n >= limit)
+  return (100000 + (n % range)).toString()
 }
 
 /** Calculate points: max 1000, decreasing with response time */
