@@ -16,7 +16,9 @@ function currentSchoolYear(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() + 1
-  const startYear = month >= 9 ? year : year - 1
+  // July, matching the rest of the suite. This read >= 9 and disagreed with
+  // this app's own api/classes route through August and September.
+  const startYear = month >= 7 ? year : year - 1
   return `${startYear}-${String(startYear + 1).slice(2)}`
 }
 
