@@ -72,7 +72,7 @@ export default function LoginClient() {
           </button>
         </form>
         <p className="text-white/30 text-xs text-center mt-6">
-          Same account as TOC-Dayplans / Student Hub / Report Card Tool.
+          Same account as TOC-Dayplans / Course Hub / Report Card Tool.
         </p>
       </div>
     </main>

@@ -56,7 +56,7 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Pre-registration / Roster System
 
-- `classes` and `students` tables are shared with student-hub (the central student data app) and a separate "Group Maker" app, same Supabase project. `students.email` and `players.student_id` are what link a signed-in student to their roster row.
+- `classes` and `students` tables are shared with course-hub (the central student data app) and a separate "Group Maker" app, same Supabase project. `students.email` and `players.student_id` are what link a signed-in student to their roster row.
 - When a teacher imports a class into a game (`importStudents` in `game/[id]/page.tsx`), players are inserted with `is_pre_registered=true` and `student_id` set, via the `pre_register` action on `/api/game/teams` (`{students: {id, name}[]}`).
 - Two ways for a student to claim their pre-registered row:
   1. **Email code sign-in** (`/` → "Sign in with your @rcseagles.ca email" → `supabase.auth.signInWithOtp({ email })` sends a 6-digit code → `supabase.auth.verifyOtp({ email, token: code, type: 'email' })` → `POST /api/game/auto-claim` with the signed-in email). Deliberately *not* OAuth (Google/Microsoft) — RCS student email is Microsoft 365, and registering an Azure AD app requires tenant admin rights nobody currently has, so magic-code email auth is the path that needs zero third-party app registration. Matches `students.email` → `players.student_id` in this game, sets `is_claimed=true`, `nickname`/`real_name` to their real name. The Supabase session is signed out immediately after — this is a one-shot identity check, not a persistent login, since the device may be shared.
@@ -67,7 +67,7 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Host Authentication
 
-Real Supabase Auth, same account as TOC-Dayplans / Student Hub / RCS Report Card Tool (same Supabase project, same `auth.users` table) — restricted to `@myrcs.ca` emails.
+Real Supabase Auth, same account as TOC-Dayplans / Course Hub / RCS Report Card Tool (same Supabase project, same `auth.users` table) — restricted to `@myrcs.ca` emails.
 
 - `middleware.ts` gates `/host/:path*` and `/game/:path*` (except `/game/[id]/display`, the projector view, intentionally unauthenticated) — redirects to `/login` if there's no session or the email isn't `@myrcs.ca`.
 - `/login` (`LoginClient.tsx`) — `supabase.auth.signInWithPassword`. No separate teacher account needed if you already have one for the other RCS apps.
