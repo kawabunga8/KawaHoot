@@ -141,3 +141,71 @@ create policy "Allow all on teams" on teams for all using (true) with check (tru
 alter table teams enable row level security;
 alter publication supabase_realtime add table teams;
 alter table teams replica identity full;
+
+-- Migration: tighten RLS on games/players/answers/teams.
+--
+-- The original "allow all" policies meant anyone holding the public anon key
+-- (visible to anyone who opens dev tools — that's normal for Supabase, RLS is
+-- supposed to be the real gate) could read or write every row in these tables
+-- directly via the Supabase API, bypassing the app entirely: every game ever
+-- played, every real student name tied to a score, readable and *writable* by
+-- anyone on the internet, forever, not just people in the room with the PIN.
+--
+-- Verified against every current API route before writing this: all game/team
+-- state-changing actions (create, start, pause, reveal, next-question,
+-- show-scores, restart, end, replay, team management) go through requireHost()
+-- and run with a real authenticated session. The only writes a genuinely
+-- anonymous player needs are join (insert an unclaimed player row),
+-- claim-player and identify-player (update/delete an *unclaimed* player row).
+-- Policies below allow exactly that and nothing more; every other write now
+-- requires a real @myrcs.ca host session.
+drop policy if exists "Allow all on games" on games;
+drop policy if exists "Allow all on players" on players;
+drop policy if exists "Allow all on answers" on answers;
+drop policy if exists "Allow all on teams" on teams;
+
+-- games: anyone can still read (needed for PIN lookup, join, display);
+-- only an authenticated host can create or change one.
+create policy "Anyone can read games" on games for select using (true);
+create policy "Authenticated can insert games" on games for insert to authenticated with check (true);
+create policy "Authenticated can update games" on games for update to authenticated using (true) with check (true);
+create policy "Authenticated can delete games" on games for delete to authenticated using (true);
+
+-- teams: same pattern. All team management runs through requireHost().
+create policy "Anyone can read teams" on teams for select using (true);
+create policy "Authenticated can insert teams" on teams for insert to authenticated with check (true);
+create policy "Authenticated can update teams" on teams for update to authenticated using (true) with check (true);
+create policy "Authenticated can delete teams" on teams for delete to authenticated using (true);
+
+-- answers: the app always writes these via the service-role client (bypasses
+-- RLS), so requiring authenticated here is defense-in-depth, not something any
+-- current flow depends on. Reads stay open (players/display need live counts).
+create policy "Anyone can read answers" on answers for select using (true);
+create policy "Authenticated can insert answers" on answers for insert to authenticated with check (true);
+create policy "Authenticated can update answers" on answers for update to authenticated using (true) with check (true);
+create policy "Authenticated can delete answers" on answers for delete to authenticated using (true);
+
+-- players: real names stay visible during a live game by design (that's the
+-- feature, same as a real Kahoot screen) — but not forever, and not writable
+-- by anyone who isn't touching their own unclaimed row.
+create policy "Anyone can read players in active games" on players
+  for select using (
+    exists (select 1 from games g where g.id = players.game_id and g.status <> 'finished')
+  );
+create policy "Authenticated can read all players" on players
+  for select to authenticated using (true);
+
+create policy "Authenticated can insert players" on players
+  for insert to authenticated with check (true);
+create policy "Anonymous join creates only a fresh unclaimed row" on players
+  for insert to anon with check (score = 0 and is_claimed = false and is_pre_registered = false);
+
+create policy "Authenticated can update players" on players
+  for update to authenticated using (true) with check (true);
+create policy "Anonymous can only update an unclaimed player" on players
+  for update to anon using (is_claimed = false);
+
+create policy "Authenticated can delete players" on players
+  for delete to authenticated using (true);
+create policy "Anonymous can only delete an unclaimed roster placeholder" on players
+  for delete to anon using (is_pre_registered = true and is_claimed = false);

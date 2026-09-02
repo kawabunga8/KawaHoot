@@ -89,6 +89,6 @@ Answer options always map: A=red/▲, B=blue/◆, C=yellow/●, D=green/■ — 
 
 ### Database Schema
 
-See `supabase-schema.sql` for the full schema including migrations. Key tables: `games`, `quiz_questions`, `players`, `answers`, `teams`. All have RLS enabled with permissive "allow all" policies — intentional for a no-auth classroom app.
+See `supabase-schema.sql` for the full schema including migrations. Key tables: `games`, `quiz_questions`, `players`, `answers`, `teams`. All have RLS enabled. Reads are open (needed for anonymous PIN lookup, join, and the display view); writes require an authenticated host session except for the narrow anonymous player actions (join, claim-player, identify-player), which are scoped to only touching an unclaimed `players` row — see the "tighten RLS" migration at the end of `supabase-schema.sql` for the full reasoning.
 
 Saved games list (for the host's "My Saved Games" panel) is persisted only in `localStorage` under the key `kawahoot_games`.
