@@ -75,7 +75,9 @@ export async function GET(req: NextRequest) {
     block_label: null,
     students: adHocData.students
       .filter((s: { class_id: string }) => s.class_id === c.id)
-      .map((s: { id: string; full_name: string }) => ({ id: s.id, full_name: s.full_name })),
+      // Ad-hoc students are local names, not Course Hub students: no id, so
+      // pre_register can never store a kawahoot_students id as a student_id.
+      .map((s: { id: string; full_name: string }) => ({ id: '', full_name: s.full_name })),
   }))
 
   return NextResponse.json([...realResult, ...adHocResult])

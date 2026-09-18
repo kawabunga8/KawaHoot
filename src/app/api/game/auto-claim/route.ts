@@ -2,22 +2,55 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const STUDENT_DOMAIN = '@rcseagles.ca'
+const COURSE_HUB_URL = process.env.COURSE_HUB_URL!
+const COURSE_HUB_API_KEY = process.env.COURSE_HUB_API_KEY!
+
+type HubStudent = { id: string; first_name: string; last_name: string; email: string | null }
+
+// Course Hub owns student records (they live in the shared project, not in
+// KawaHoot's own database), so the email -> student match asks its API.
+async function findStudentByEmail(email: string): Promise<HubStudent | null> {
+  try {
+    const res = await fetch(`${COURSE_HUB_URL}/api/students?email=${encodeURIComponent(email)}`, {
+      headers: { Authorization: `Bearer ${COURSE_HUB_API_KEY}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const students = (await res.json()) as HubStudent[]
+    // Exact match here too, so an older Course Hub that ignores ?email= (and
+    // returns everyone) can never hand back the wrong student.
+    const matches = students.filter(s => s.email?.toLowerCase() === email.toLowerCase())
+    return matches.length === 1 ? matches[0] : null
+  } catch {
+    return null
+  }
+}
 
 /**
- * Called right after a student signs in with Google on the join page.
- * Matches their email to public.students, then to a pre-registered, unclaimed
- * player row in this game (linked via players.student_id). If there's no
- * roster match — wrong domain, not enrolled, roster never imported for this
- * game, etc. — falls back to a plain auto-named Guest, so a student who
- * can't be matched is never blocked from playing.
+ * Called right after a student signs in on the join page, while the session
+ * still exists. The email is taken from the verified session (the access token
+ * is checked with Supabase Auth), never from the request body, so a player
+ * cannot claim someone else by typing their address.
+ *
+ * The student is matched in Course Hub, then to a pre-registered, unclaimed
+ * player row in this game (players.student_id). That row is marked
+ * identity_verified. If there is no roster match (wrong domain, not enrolled,
+ * roster never imported for this game) the student joins as a Guest, so
+ * nobody is ever blocked from playing.
  */
 export async function POST(req: NextRequest) {
-  const { gameId, email } = await req.json()
-  if (!gameId || !email) {
+  const { gameId, accessToken } = await req.json()
+  if (!gameId || !accessToken) {
     return NextResponse.json({ success: false, error: 'Missing fields' }, { status: 400 })
   }
 
   const admin = createAdminClient()
+
+  const { data: { user } } = await admin.auth.getUser(accessToken)
+  const email = user?.email
+  if (!email) {
+    return NextResponse.json({ success: false, error: 'Sign-in could not be verified' }, { status: 401 })
+  }
 
   const { data: game } = await admin
     .from('games')
@@ -31,12 +64,8 @@ export async function POST(req: NextRequest) {
 
   let claimed: { id: string; nickname: string } | null = null
 
-  if (String(email).toLowerCase().endsWith(STUDENT_DOMAIN)) {
-    const { data: student } = await admin
-      .from('students')
-      .select('id, first_name, last_name')
-      .ilike('email', email)
-      .single()
+  if (email.toLowerCase().endsWith(STUDENT_DOMAIN)) {
+    const student = await findStudentByEmail(email)
 
     if (student) {
       const { data: rosterPlayer } = await admin
@@ -52,7 +81,7 @@ export async function POST(req: NextRequest) {
         const realName = `${student.first_name} ${student.last_name}`.trim()
         const { data: updated, error } = await admin
           .from('players')
-          .update({ is_claimed: true, nickname: realName, real_name: realName })
+          .update({ is_claimed: true, identity_verified: true, nickname: realName, real_name: realName })
           .eq('id', rosterPlayer.id)
           .select('id, nickname')
           .single()

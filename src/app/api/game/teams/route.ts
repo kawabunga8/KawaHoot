@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       if (existing) {
         const { error: updateError } = await admin
           .from('players')
-          .update({ is_pre_registered: true, is_claimed: false, student_id: studentId })
+          .update({ is_pre_registered: true, is_claimed: false, identity_verified: false, student_id: studentId || null })
           .eq('id', existing.id)
         if (updateError) errors.push(`${nickname}: ${updateError.message}`)
         results.push({ nickname, playerId: existing.id })
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       }
       const { data: player, error: insertError } = await admin
         .from('players')
-        .insert({ game_id: gameId, nickname, score: 0, is_pre_registered: true, is_claimed: false, student_id: studentId })
+        .insert({ game_id: gameId, nickname, score: 0, is_pre_registered: true, is_claimed: false, student_id: studentId || null })
         .select('id').single()
       if (insertError) {
         errors.push(`${nickname}: ${insertError.message}`)

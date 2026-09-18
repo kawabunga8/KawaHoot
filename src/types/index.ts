@@ -42,6 +42,7 @@ export type Player = {
   is_pre_registered: boolean
   is_claimed: boolean
   student_id: string | null
+  identity_verified: boolean
   joined_at: string
 }
 

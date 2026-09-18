@@ -28,21 +28,24 @@ export default function HomePage() {
   // a device that may be shared with the next student.
   async function completeSignIn() {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const email = user?.email
-    await supabase.auth.signOut()
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
 
-    if (!email) {
+    if (!accessToken) {
+      await supabase.auth.signOut()
       setLoading(false)
       setError('Sign-in failed')
       return
     }
 
+    // The server verifies the token itself (it does not trust an email sent
+    // from the browser), so the claim must happen before the session is dropped.
     const res = await fetch('/api/game/auto-claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId, email }),
+      body: JSON.stringify({ gameId, accessToken }),
     })
+    await supabase.auth.signOut()
     const data = await res.json()
     setLoading(false)
     if (!data.success) {
