@@ -138,8 +138,8 @@ export default function HomePage() {
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (newPassword.trim().length < 6) {
-      setError('Password must be at least 6 characters')
+    if (newPassword.trim().length < 8) {
+      setError('Password must be at least 8 characters')
       return
     }
     setLoading(true)
@@ -147,7 +147,10 @@ export default function HomePage() {
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword.trim() })
     if (updateError) {
       setLoading(false)
-      setError(updateError.message)
+      // Supabase rejects passwords found in known data breaches (HaveIBeenPwned).
+      setError(updateError.code === 'weak_password'
+        ? 'That password has shown up in a data breach. Please choose a different one, or skip this step.'
+        : updateError.message)
       return
     }
     await completeSignIn()
@@ -385,7 +388,7 @@ export default function HomePage() {
                 type="password"
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                placeholder="New password (6+ characters)"
+                placeholder="New password (8+ characters)"
                 autoFocus
                 className="w-full bg-white/10 border-2 border-white/30 rounded-2xl px-5 py-4 text-center text-lg text-white placeholder:text-white/40 focus:outline-none focus:border-kawaCoral transition-colors"
               />
