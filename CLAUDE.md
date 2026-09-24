@@ -25,12 +25,13 @@ No host password env var anymore — see Host Authentication below.
 ## Infrastructure (2026-09-23)
 
 `.env.local` here now points at a **self-hosted local Supabase stack**
-(`http://127.0.0.1:54421`-style URL, see `/Volumes/Repos/local-stack`)
-instead of the original cloud project — old cloud credentials preserved
-in a `.env.local.*-backup` file, not deleted. **Read
-`local-stack/STATUS.md` first** for the full current picture. KawaHoot
-doesn't store rosters itself either way — it fetches them live from
-Course Hub per session.
+(`http://127.0.0.1:54421`, the `supabase-local/shared` directory — **not**
+the similarly-named `/Volumes/Repos/local-stack` repo, which is a
+different, schema-only stack with no real data) instead of the original
+cloud project — old cloud credentials preserved in a `.env.local.*-backup`
+file, not deleted. **Read `local-stack/STATUS.md` first** for the full
+current picture. KawaHoot doesn't store rosters itself either way — it
+fetches them live from Course Hub per session.
 
 The Vercel deployment for this project is **paused** (aliases return
 `503 DEPLOYMENT_PAUSED`) and **git↔Vercel auto-deploy has been
