@@ -93,6 +93,7 @@ Student email-code sign-in (see Pre-registration above) sends its 6-digit codes 
 
 - `middleware.ts` gates `/host/:path*` and `/game/:path*` (except `/game/[id]/display`, the projector view, intentionally unauthenticated) — redirects to `/login` if there's no session or the email isn't `@myrcs.ca`.
 - `/login` (`LoginClient.tsx`) — `supabase.auth.signInWithPassword`, against the KawaHoot stack's own accounts (see above).
+- The auth cookie is named `sb-kawahoot-auth-token` (`src/lib/supabase/cookie.ts`), passed as `cookieOptions` to the browser client, server client and middleware — all three must match. The default name would be `sb-127-auth-token`, the same as the shared stack's, and localhost cookies ignore the port, so the two logins would overwrite each other (and middleware's cookie-only `getSession()` would let a Course Hub session through to `/host`, only for API calls to 401).
 - API routes call `await requireHost(req)` (`src/lib/require-host.ts`), which checks the real session server-side via `createClient()` from `src/lib/supabase/server.ts` — not a password comparison.
 - `hostFetch()` (`src/lib/host-fetch.ts`) is now a thin `fetch` wrapper with `credentials: 'include'` — the session travels as a cookie automatically on same-origin requests, no token/header needed.
 - `HostGate` is a no-op passthrough component kept only so `/host` and `/game/[id]` don't need their JSX restructured — the real gate is `middleware.ts`, which runs before the page renders.

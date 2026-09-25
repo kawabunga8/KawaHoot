@@ -72,7 +72,7 @@ export default function LoginClient() {
           </button>
         </form>
         <p className="text-white/30 text-xs text-center mt-6">
-          Same account as TOC-Dayplans / Course Hub / Report Card Tool.
+          Your KawaHoot account, separate from the other RCS apps.
         </p>
       </div>
     </main>
