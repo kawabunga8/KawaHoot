@@ -30,7 +30,7 @@ directory) instead of the original cloud project — old cloud credentials
 preserved in a `.env.local.*-backup` file, not deleted. This is **not**
 the `supabase-local/shared` stack (`54421`) that Course Hub, Report Card
 Tool and Group Maker use, and **not** the similarly-named
-`/Volumes/Repos/local-stack` repo (a schema-only stack with no real data).
+`local-stack` repo (a schema-only stack with no real data).
 Start it with `supabase start` in `supabase-local/kawahoot` once Colima is
 up; `supabase stop` it before `colima stop`. **Read `local-stack/STATUS.md`
 first** for the full current picture. KawaHoot doesn't store rosters
