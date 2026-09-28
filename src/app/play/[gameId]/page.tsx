@@ -31,7 +31,7 @@ export default function PlayPage() {
   const playerId = searchParams.get('playerId')
 
   // Stable client — never recreated
-  const supabase = useMemo(() => createClient(), [])
+  const supabase = useMemo(() => createClient(gameId), [gameId])
 
   const [game, setGame] = useState<Game | null>(null)
   const [player, setPlayer] = useState<Player | null>(null)

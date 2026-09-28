@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const MAX_NICKNAME_LENGTH = 20
 
@@ -20,9 +21,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const supabase = await createClient()
-
-  const { data: game } = await supabase
+  // Anonymous sessions can only read a game they already know the id of, so the PIN
+  // lookup uses the service role; everything after it is scoped to this one game.
+  const { data: game } = await createAdminClient()
     .from('games')
     .select('id, status, mode')
     .eq('pin', pin)
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
   if (!game) {
     return NextResponse.json({ success: false, error: 'Game not found' }, { status: 404 })
   }
+
+  const supabase = await createClient(game.id)
 
   // In teams mode, find the team with the fewest members to auto-assign
   let teamId: string | null = null
