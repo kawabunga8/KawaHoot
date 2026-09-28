@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Missing fields' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient(gameId)
 
   // Verify both players belong to the same game (and match the supplied gameId)
   const { data: players } = await supabase

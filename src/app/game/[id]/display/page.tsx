@@ -23,7 +23,7 @@ const TEAM_COLOR_HEX: Record<string, string> = {
 
 export default function DisplayPage() {
   const { id } = useParams<{ id: string }>()
-  const supabase = useMemo(() => createClient(), [])
+  const supabase = useMemo(() => createClient(id), [id])
 
   const [game, setGame] = useState<Game | null>(null)
   const [questionTotal, setQuestionTotal] = useState(0)

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: NextRequest) {
   const pin = req.nextUrl.searchParams.get('pin')
   if (!pin || !/^\d{6}$/.test(pin)) return NextResponse.json({ valid: false })
 
-  const supabase = await createClient()
-  const { data } = await supabase
+  // Service role: anonymous sessions can't search games by PIN (see join/route.ts)
+  const admin = createAdminClient()
+  const { data } = await admin
     .from('games')
     .select('id, status, mode')
     .eq('pin', pin)
@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
   if (!data) return NextResponse.json({ valid: false })
 
   // Use admin client to bypass any RLS when reading pre-registered players
-  const admin = createAdminClient()
   const { data: players } = await admin
     .from('players')
     .select('id, nickname')
