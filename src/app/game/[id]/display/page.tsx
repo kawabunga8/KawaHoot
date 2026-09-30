@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Game, Player, QuizQuestion, Team } from '@/types'
+import { JOIN_ADDRESS } from '@/lib/join-address'
 
 const ANSWER_COLORS = {
   A: { bg: 'bg-kawared', text: 'text-white', shape: '▲' },
@@ -182,8 +183,12 @@ export default function DisplayPage() {
           <h2 className="text-white font-bold text-6xl mb-4" style={{ fontFamily: "'Fredoka One', cursive" }}>
             {game.title}
           </h2>
-          <p className="text-purple-300 text-2xl uppercase tracking-widest font-bold mb-2">Players join at</p>
-          <p className="text-kawaYellow font-bold text-6xl mb-8" style={{ fontFamily: "'Fredoka One', cursive" }}>kawahoot.vercel.app</p>
+          {JOIN_ADDRESS && (
+            <>
+              <p className="text-purple-300 text-2xl uppercase tracking-widest font-bold mb-2">Players join at</p>
+              <p className="text-kawaYellow font-bold text-4xl sm:text-6xl mb-8 break-all" style={{ fontFamily: "'Fredoka One', cursive" }}>{JOIN_ADDRESS}</p>
+            </>
+          )}
           <div className="bg-white/10 border-4 border-kawaYellow rounded-3xl px-16 py-8">
             <p className="text-white/60 text-lg mb-2 font-bold uppercase tracking-widest">Game PIN</p>
             <p className="text-white font-bold text-8xl tracking-[0.3em]" style={{ fontFamily: "'Fredoka One', cursive" }}>

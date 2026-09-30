@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { hostFetch } from '@/lib/host-fetch'
 import HostGate from '@/components/HostGate'
 import type { Game, Player, QuizQuestion, LeaderboardEntry, Team, KawaClass } from '@/types'
+import { JOIN_ADDRESS } from '@/lib/join-address'
 
 const ANSWER_COLORS = {
   A: { bg: 'bg-kawared', text: 'text-white', shape: '▲' },
@@ -649,8 +650,17 @@ export default function GameHostPage() {
         <div className="max-w-2xl mx-auto">
           {/* PIN display */}
           <div className="bg-white/10 backdrop-blur border border-white/20 rounded-3xl p-6 mb-5 text-center">
-            <p className="text-white/70 text-sm uppercase tracking-widest font-bold mb-1">Players join at</p>
-            <p className="text-kawaYellow font-bold text-3xl" style={{ fontFamily: "'Fredoka One', cursive" }}>kawahoot.vercel.app</p>
+            {JOIN_ADDRESS ? (
+              <>
+                <p className="text-white/70 text-sm uppercase tracking-widest font-bold mb-1">Players join at</p>
+                <p className="text-kawaYellow font-bold text-3xl break-all" style={{ fontFamily: "'Fredoka One', cursive" }}>{JOIN_ADDRESS}</p>
+              </>
+            ) : (
+              <p className="text-white/70 text-sm font-bold">
+                Not shared on the network: only this laptop can join. To let students join, run{' '}
+                <code className="text-kawaYellow">class.sh start</code> (or ask Claude to share KawaHoot).
+              </p>
+            )}
             <div className="my-4 flex justify-center">
               <div className="bg-kawaDark border-4 border-kawaYellow rounded-2xl px-8 py-4 relative">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-kawaYellow text-kawaDark text-xs font-bold px-3 py-1 rounded-full">GAME PIN</div>
