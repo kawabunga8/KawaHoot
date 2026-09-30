@@ -87,7 +87,7 @@ State transitions are always driven by API routes (`/api/game/*`), never by dire
 
 ### Host Authentication
 
-Real Supabase Auth, restricted to `@myrcs.ca` emails, against KawaHoot's **own** `auth.users` table in the `supabase-local/kawahoot` stack. It is **not** shared with Course Hub / RCS Report Card Tool / Group Maker (those use `supabase-local/shared`) or TOC-Dayplans (cloud) — a teacher needs a separate account here, and a password reset means updating `auth.users` in the `supabase_db_kawahoot` container. (Before the local move this said "same account as the other RCS apps"; that no longer holds.)
+Real Supabase Auth, restricted to `@myrcs.ca` emails, against KawaHoot's **own** `auth.users` table in the `supabase-local/kawahoot` stack. It is **not** shared with Course Hub / RCS Report Card Tool / Group Maker or TOC-Dayplans (those use `supabase-local/shared`; TOC-Dayplans moved there 2026-09-30) — a teacher needs a separate account here, and a password reset means updating `auth.users` in the `supabase_db_kawahoot` container. (Before the local move this said "same account as the other RCS apps"; that no longer holds.)
 
 Student email-code sign-in (see Pre-registration above) sends its 6-digit codes through this stack's local mail catcher, so when running locally they land in the test inbox at `http://localhost:54524`, not in students' real inboxes. The manual roster-click claim path is unaffected.
 
